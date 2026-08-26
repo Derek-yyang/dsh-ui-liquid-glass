@@ -53,6 +53,11 @@ export const MODAL_PANEL_SELECTOR = '[data-modal-panel]'
  * settings panel an opaque fill without changing global surface tokens. */
 export const SETTINGS_DIALOG_SELECTOR = '[role="dialog"][aria-modal="true"]'
 
+/** Portal menus (`position: fixed` on body). Their `--dsw-specific-menu`
+ * fill follows global clarity and would show the page through a picker;
+ * this plugin restores an opaque fill on these lists only. */
+export const PORTAL_MENU_SELECTOR = 'body > [role="menu"]'
+
 /** Stable selector of the app-owned conversation scrollport whose scroll
  * position drives the wallpaper's parallax translation. */
 export const SCROLL_SELECTOR = '[data-conversation-scroll]'

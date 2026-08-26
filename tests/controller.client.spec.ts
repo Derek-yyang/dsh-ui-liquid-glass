@@ -22,7 +22,7 @@ import type { ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
 import css from '../src/client/glass.module.css'
 import {
   COMPOSER_SELECTOR, GLASS_MARKER, LIQUID_GLASS_TOKENS, MODAL_PANEL_SELECTOR,
-  PACKAGE_ID, SEAT_SELECTOR, SETTINGS_DIALOG_SELECTOR, SIDEBAR_SELECTOR, TUNING_PANEL_SELECTOR, VEIL_VAR, WALLPAPER_SELECTOR,
+  PACKAGE_ID, PORTAL_MENU_SELECTOR, SEAT_SELECTOR, SETTINGS_DIALOG_SELECTOR, SIDEBAR_SELECTOR, TUNING_PANEL_SELECTOR, VEIL_VAR, WALLPAPER_SELECTOR,
 } from '../src/tokens.ts'
 import { DEFAULT_LOOK, GLASS_LOOK_PRESETS } from '../src/look.ts'
 import type { LiquidGlassHostSection } from '../src/look.ts'
@@ -146,6 +146,7 @@ describe('LiquidGlassController', () => {
       expect(document.querySelector('style')?.textContent).toContain(`${SIDEBAR_SELECTOR}{backdrop-filter:blur(20px)`)
       expect(document.querySelector('style')?.textContent).toContain(`${MODAL_PANEL_SELECTOR}{backdrop-filter:blur(20px)`)
       expect(document.querySelector('style')?.textContent).toContain(`${SETTINGS_DIALOG_SELECTOR}{background:#fff}`)
+      expect(document.querySelector('style')?.textContent).toContain(`${PORTAL_MENU_SELECTOR}{background:#fff}`)
       const dock = document.querySelector('[data-dsh-liquid-glass-dock]')
       expect(dock).not.toBeNull()
       expect(dock?.getAttribute('aria-pressed')).toBe('true')

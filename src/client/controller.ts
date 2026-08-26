@@ -14,7 +14,7 @@ import { loadCustomWallpaper, saveCustomWallpaper } from './wallpaper-store.ts'
 import {
   CLARITY_DEFAULT_PERCENT, COMPOSER_SELECTOR, GLASS_MARKER, LIQUID_GLASS_TOKENS,
   MODAL_PANEL_SELECTOR, PACKAGE_ID, SCROLL_SELECTOR, SEAT_SELECTOR,
-  SETTINGS_DIALOG_SELECTOR, SIDEBAR_SELECTOR, VEIL_DEFAULT_PERCENT, VEIL_VAR, WALLPAPER_CROSSFADE_MS,
+  PORTAL_MENU_SELECTOR, SETTINGS_DIALOG_SELECTOR, SIDEBAR_SELECTOR, VEIL_DEFAULT_PERCENT, VEIL_VAR, WALLPAPER_CROSSFADE_MS,
   WALLPAPER_PRESETS, WALLPAPER_SELECTOR,
 } from '../tokens.ts'
 import { scaleSurfaceTokens } from '../tokens.ts'
@@ -717,6 +717,8 @@ export class LiquidGlassController {
       // same body marker the wallpaper presets use.
       `${SETTINGS_DIALOG_SELECTOR}{background:#fff}`,
       `body[data-ds-dark-theme] ${SETTINGS_DIALOG_SELECTOR}{background:#1c1e24}`,
+      `${PORTAL_MENU_SELECTOR}{background:#fff}`,
+      `body[data-ds-dark-theme] ${PORTAL_MENU_SELECTOR}{background:#1c1e24}`,
     ].join('')
     document.head.append(rule)
     this.#overlayRules = rule
