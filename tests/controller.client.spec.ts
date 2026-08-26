@@ -22,7 +22,7 @@ import type { ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
 import css from '../src/client/glass.module.css'
 import {
   COMPOSER_SELECTOR, GLASS_MARKER, LIQUID_GLASS_TOKENS, MODAL_PANEL_SELECTOR,
-  PACKAGE_ID, SEAT_SELECTOR, SETTINGS_DIALOG_SELECTOR, SIDEBAR_SELECTOR, VEIL_VAR, WALLPAPER_SELECTOR,
+  PACKAGE_ID, SEAT_SELECTOR, SETTINGS_DIALOG_SELECTOR, SIDEBAR_SELECTOR, TUNING_PANEL_SELECTOR, VEIL_VAR, WALLPAPER_SELECTOR,
 } from '../src/tokens.ts'
 import { DEFAULT_LOOK, GLASS_LOOK_PRESETS } from '../src/look.ts'
 import type { LiquidGlassHostSection } from '../src/look.ts'
@@ -837,6 +837,29 @@ describe('LiquidGlassController', () => {
       }
     } finally {
       vi.useRealTimers()
+    }
+  })
+
+  it('right-clicking the dock opens a tuning panel whose sliders hot-update the look', () => {
+    const { lens } = installRenderer()
+    const { controller } = bench()
+    const dispose = controller.start()
+    try {
+      const dock = document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement
+      expect(document.querySelector(TUNING_PANEL_SELECTOR)).toBeNull()
+      dock.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+      const panel = document.querySelector(TUNING_PANEL_SELECTOR) as HTMLElement
+      expect(panel).not.toBeNull()
+      const slider = panel.querySelector('input[aria-label="折射"]') as HTMLInputElement
+      expect(slider.value).toBe(String(RICH.refraction))
+      slider.value = '0.09'
+      slider.dispatchEvent(new Event('input'))
+      expect(controller.snapshot.getSnapshot().look).toBe('custom')
+      expect(lens.options.refraction).toBe(0.09)
+      dock.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+      expect(document.querySelector(TUNING_PANEL_SELECTOR)).toBeNull()
+    } finally {
+      dispose()
     }
   })
 })

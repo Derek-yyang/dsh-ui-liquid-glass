@@ -27,8 +27,10 @@ declare module '*/glass.module.css' {
     readonly settingsSliderGroup: string
     readonly settingsSlider: string
     readonly settingsSliderValue: string
-    readonly advancedToggle: string
-    readonly advancedBody: string
+    readonly tuning: string
+    readonly tuningTitle: string
+    readonly tuningRow: string
+    readonly tuningLabel: string
   }
   const classes: GlassModuleClasses
   export default classes

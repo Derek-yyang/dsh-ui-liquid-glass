@@ -54,7 +54,6 @@ export function apply(ctx: ClientContext): void {
     setVeil: (percent) => { controller.setVeil(percent) },
     setClarity: (percent) => { controller.setClarity(percent) },
     setLook: (id) => { controller.setLook(id) },
-    setLookValues: (values) => { controller.setLookValues(values) },
     uploadCustom: image => controller.uploadCustomWallpaper(image),
   })
 

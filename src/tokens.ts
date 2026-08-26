@@ -63,6 +63,9 @@ export const GLASS_MARKER = 'data-dsh-liquid-glass-composer'
 /** DOM marker of the plugin-owned fixed toggle dock. */
 export const DOCK_SELECTOR = '[data-dsh-liquid-glass-dock]'
 
+/** DOM marker of the dock's right-click look-tuning popover. */
+export const TUNING_PANEL_SELECTOR = '[data-dsh-liquid-glass-tuning]'
+
 /** CSS custom property the controller drives with the custom-image veil
  * strength (0–1); the custom preset's gradient multiplies its stop alphas by
  * it, so 0 shows the raw image and the default 1 is the shipped calibration. */

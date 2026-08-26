@@ -46,7 +46,6 @@ function mount(snapshot: LiquidGlassSnapshot) {
   const setVeil = vi.fn()
   const setClarity = vi.fn()
   const setLook = vi.fn()
-  const setLookValues = vi.fn()
   const uploadCustom = vi.fn(async (_image: File) => {})
   const props: LiquidGlassSettingsCardProps = {
     useSessions: emptySessions(),
@@ -57,12 +56,11 @@ function mount(snapshot: LiquidGlassSnapshot) {
     setVeil,
     setClarity,
     setLook,
-    setLookValues,
     uploadCustom,
     t: makeTranslate(en),
   }
   render(<LiquidGlassSettingsCard {...props} />)
-  return { store, setEnabled, setPreset, setVeil, setClarity, setLook, setLookValues, uploadCustom }
+  return { store, setEnabled, setPreset, setVeil, setClarity, setLook, uploadCustom }
 }
 
 function openBody(): void {
@@ -148,14 +146,10 @@ describe('LiquidGlassSettingsCard', () => {
     expect(setLook).toHaveBeenCalledWith('restrained')
   })
 
-  it('advanced knobs stay collapsed until opened, then route a refraction drag to setLookValues', () => {
-    const { setLookValues } = mount(cardState({ enabled: true, preset: 'ridge' }))
+  it('the settings card does not host the advanced look knobs', () => {
+    mount(cardState({ enabled: true, preset: 'ridge' }))
     openBody()
     expect(screen.queryByRole('slider', { name: 'Refraction' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
-    const slider = screen.getByRole('slider', { name: 'Refraction' }) as HTMLInputElement
-    expect(slider.value).toBe(String(RICH.refraction))
-    fireEvent.change(slider, { target: { value: '0.09' } })
-    expect(setLookValues).toHaveBeenCalledWith({ ...RICH, refraction: 0.09 })
+    expect(screen.queryByRole('button', { name: /Advanced/ })).toBeNull()
   })
 })

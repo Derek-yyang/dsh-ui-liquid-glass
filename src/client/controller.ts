@@ -20,7 +20,7 @@ import {
 import { scaleSurfaceTokens } from '../tokens.ts'
 import type { WallpaperPreset } from '../tokens.ts'
 import {
-  DEFAULT_LOOK, GLASS_LOOK_PRESETS, lookIdFor, sameLook,
+  DEFAULT_LOOK, GLASS_LOOK_PRESETS, GLASS_LOOK_SLIDER_KEYS, GLASS_LOOK_SLIDERS, lookIdFor, sameLook,
 } from '../look.ts'
 import type { GlassLookId, GlassLookValues, LiquidGlassHostSection, NamedGlassLook } from '../look.ts'
 
@@ -36,6 +36,20 @@ const GL_FIXED = {
 }
 
 const DEFAULT_LOOK_VALUES: GlassLookValues = GLASS_LOOK_PRESETS[DEFAULT_LOOK]
+
+const KNOB_LABEL_ZH: Record<(typeof GLASS_LOOK_SLIDER_KEYS)[number], string> = {
+  refraction: '折射',
+  bevelDepth: '斜边深',
+  bevelWidth: '斜边宽',
+  frost: '磨砂',
+  aberration: '色散',
+  magnify: '放大',
+}
+
+/** Format a look-knob number for the popover readout. */
+function formatKnob(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+}
 
 /** Look knobs persisted in the Host document, in write order. */
 const LOOK_KEYS = [
@@ -157,6 +171,8 @@ export class LiquidGlassController {
    * uploaded on this device. */
   #customUrl: string | undefined
   #dock: HTMLButtonElement | undefined
+  #tuning: HTMLDivElement | undefined
+  #outsidePointer: ((event: Event) => void) | undefined
   #wallpaperHost: HTMLDivElement | undefined
   #wallpaper: HTMLDivElement | undefined
   /** Outgoing wallpaper clone fading out over a preset swap; removed when the
@@ -303,6 +319,7 @@ export class LiquidGlassController {
       look: lookIdFor(this.#look),
       lookValues: { ...this.#look },
     })
+    this.#syncTuningPanel()
   }
 
   /**
@@ -438,8 +455,12 @@ export class LiquidGlassController {
     this.#dock.className = css.dock
     this.#dock.dataset.dshLiquidGlassDock = ''
     this.#dock.setAttribute('aria-label', '切换液态玻璃效果')
-    this.#dock.title = '液态玻璃效果（长按切换壁纸）'
+    this.#dock.title = '液态玻璃效果（长按切换壁纸，右键微调）'
     this.#dock.append(dropletIcon())
+    this.#dock.addEventListener('contextmenu', (event) => {
+      event.preventDefault()
+      this.#toggleTuningPanel()
+    })
     this.#dock.addEventListener('click', () => {
       // A long press already did its own work (preset cycle); swallow the
       // click that always follows the pointer release.
@@ -821,6 +842,98 @@ export class LiquidGlassController {
     }
   }
 
+  /** Open or close the dock's right-click look panel. */
+  #toggleTuningPanel(): void {
+    if (this.#tuning !== undefined) this.#closeTuningPanel()
+    else this.#openTuningPanel()
+  }
+
+  /** Mount the look-tuning popover above the dock. */
+  #openTuningPanel(): void {
+    if (this.#tuning !== undefined) return
+    const panel = document.createElement('div')
+    panel.className = css.tuning
+    panel.setAttribute('data-dsh-liquid-glass-tuning', '')
+    panel.addEventListener('pointerdown', (event) => { event.stopPropagation() })
+    document.body.append(panel)
+    this.#tuning = panel
+    this.#syncTuningPanel()
+    this.#outsidePointer = (event) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (this.#tuning?.contains(target) === true) return
+      if (this.#dock?.contains(target) === true) return
+      this.#closeTuningPanel()
+    }
+    document.addEventListener('pointerdown', this.#outsidePointer)
+  }
+
+  /** Drop the popover and its outside-click listener. */
+  #closeTuningPanel(): void {
+    if (this.#outsidePointer !== undefined) {
+      document.removeEventListener('pointerdown', this.#outsidePointer)
+      this.#outsidePointer = undefined
+    }
+    this.#tuning?.remove()
+    this.#tuning = undefined
+  }
+
+  /** Rebuild the popover contents from the live look bag. */
+  #syncTuningPanel(): void {
+    const panel = this.#tuning
+    if (panel === undefined) return
+    panel.replaceChildren()
+    const title = document.createElement('div')
+    title.className = css.tuningTitle
+    title.textContent = '微调玻璃'
+    panel.append(title)
+    for (const key of GLASS_LOOK_SLIDER_KEYS) {
+      const spec = GLASS_LOOK_SLIDERS[key]
+      const row = document.createElement('div')
+      row.className = css.tuningRow
+      const label = document.createElement('span')
+      label.className = css.tuningLabel
+      label.textContent = KNOB_LABEL_ZH[key]
+      const input = document.createElement('input')
+      input.type = 'range'
+      input.className = css.settingsSlider
+      input.min = String(spec.min)
+      input.max = String(spec.max)
+      input.step = String(spec.step)
+      input.value = String(this.#look[key])
+      input.setAttribute('aria-label', KNOB_LABEL_ZH[key])
+      const readout = document.createElement('span')
+      readout.className = css.settingsSliderValue
+      readout.textContent = formatKnob(this.#look[key])
+      input.addEventListener('input', () => {
+        this.setLookValues({ ...this.#look, [key]: Number(input.value) })
+      })
+      row.append(label, input, readout)
+      panel.append(row)
+    }
+    panel.append(this.#tuningToggle('投影', 'shadow'), this.#tuningToggle('高光', 'specular'))
+  }
+
+  /** One on/off row in the tuning popover. */
+  #tuningToggle(labelText: string, key: 'shadow' | 'specular'): HTMLDivElement {
+    const row = document.createElement('div')
+    row.className = css.tuningRow
+    const label = document.createElement('span')
+    label.className = css.tuningLabel
+    label.textContent = labelText
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = css.settingsToggle
+    const on = this.#look[key]
+    button.setAttribute('aria-pressed', String(on))
+    button.textContent = on ? '开' : '关'
+    button.addEventListener('click', () => {
+      this.setLookValues({ ...this.#look, [key]: !this.#look[key] })
+    })
+    row.append(label, button)
+    return row
+  }
+
   #teardown(): void {
     if (this.#removed) return
     this.#removed = true
@@ -835,6 +948,7 @@ export class LiquidGlassController {
     this.#suspendRenderer()
     this.#disposeLayer?.()
     this.#disposeLayer = undefined
+    this.#closeTuningPanel()
     this.#dock?.remove()
     this.#dock = undefined
     this.#wallpaperHost?.remove()
