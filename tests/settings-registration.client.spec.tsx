@@ -14,6 +14,16 @@ import { apply, inject, NS } from '../src/client/index.ts'
 import { LiquidGlassSettingsCard } from '../src/client/settings-card.tsx'
 import type { LiquidGlassSettingsCardInjected } from '../src/client/settings-card.tsx'
 import { SETTINGS_NAMESPACE, WALLPAPER_SELECTOR } from '../src/tokens.ts'
+import { DEFAULT_LOOK, GLASS_LOOK_PRESETS } from '../src/look.ts'
+import type { LiquidGlassHostSection } from '../src/look.ts'
+
+const RICH = GLASS_LOOK_PRESETS[DEFAULT_LOOK]
+
+function hostSection(
+  partial: Partial<LiquidGlassHostSection> & Pick<LiquidGlassHostSection, 'enabled' | 'preset'>,
+): LiquidGlassHostSection {
+  return { veil: 100, clarity: 0, ...RICH, ...partial }
+}
 
 usePinnedBrowserLanguages('zh-CN')
 afterEach(() => {
@@ -23,7 +33,7 @@ afterEach(() => {
 })
 
 /** A settings scope stub: ready with the given section, recording writes. */
-function scopeStub(section: { enabled: boolean; preset: string }) {
+function scopeStub(section: LiquidGlassHostSection) {
   const writes: Array<[string, unknown]> = []
   let value = { ...section }
   const listeners = new Set<() => void>()
@@ -52,10 +62,10 @@ function scopeStub(section: { enabled: boolean; preset: string }) {
     },
     unset: (): Promise<void> => Promise.resolve(),
   }
-  return { scope: scope as unknown as SettingsScope<{ enabled: boolean; preset: string; veil: number; clarity: number }>, writes }
+  return { scope: scope as unknown as SettingsScope<LiquidGlassHostSection>, writes }
 }
 
-async function bench(section: { enabled: boolean; preset: string; veil: number; clarity: number }) {
+async function bench(section: LiquidGlassHostSection) {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   const locale = new LocaleRuntime(ctx)
@@ -79,7 +89,7 @@ describe('ui-liquid-glass browser plugin settings registration', () => {
   })
 
   it('registers a namespace-keyed card whose inject face drives the controller and the scope', async () => {
-    const b = await bench({ enabled: true, preset: 'ridge', veil: 100, clarity: 0 })
+    const b = await bench(hostSection({ enabled: true, preset: 'ridge' }))
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
 
@@ -89,7 +99,10 @@ describe('ui-liquid-glass browser plugin settings registration', () => {
     expect(entry.locale).toBe(NS)
 
     const injected = (entry.inject as unknown as () => LiquidGlassSettingsCardInjected)()
-    expect(injected.hooks.snapshot.getSnapshot()).toEqual({ enabled: true, preset: 'ridge', custom: false, veil: 100, clarity: 0 })
+    expect(injected.hooks.snapshot.getSnapshot()).toEqual({
+      enabled: true, preset: 'ridge', custom: false, veil: 100, clarity: 0,
+      look: DEFAULT_LOOK, lookValues: RICH,
+    })
 
     injected.setEnabled(false)
     expect(b.settings.writes).toEqual([['enabled', false]])

@@ -19,28 +19,29 @@ import {
 } from '../tokens.ts'
 import { scaleSurfaceTokens } from '../tokens.ts'
 import type { WallpaperPreset } from '../tokens.ts'
+import {
+  DEFAULT_LOOK, GLASS_LOOK_PRESETS, lookIdFor, sameLook,
+} from '../look.ts'
+import type { GlassLookId, GlassLookValues, LiquidGlassHostSection, NamedGlassLook } from '../look.ts'
 
-/** liquidGL tuning: the demo-5 look with the dial turned up — a clearly
- * visible center refraction, a deep wide bevel rim, no frost, and the
- * library's drop shadow. Stronger than demo-5 because at surface clarity 100
- * the card sits on the raw wallpaper with no milky contrast around it, so the
- * bend has to read on its own. Full snapshot resolution keeps the rim crisp
- * on HiDPI. */
-const GL_OPTIONS = {
+/** liquidGL options that are not a look: the compositor target, the snapshot
+ * source, HiDPI capture, the fade-in, and no tilt. Look knobs (refraction,
+ * bevel, frost, aberration, magnify, shadow, specular) live on `#look`. */
+const GL_FIXED = {
   target: COMPOSER_SELECTOR,
   snapshot: WALLPAPER_SELECTOR,
   resolution: 2.0,
-  refraction: 0.06,
-  aberration: 0,
-  bevelDepth: 0.18,
-  bevelWidth: 0.09,
-  frost: 0,
-  magnify: 1,
-  shadow: true,
-  specular: true,
-  reveal: 'fade',
+  reveal: 'fade' as const,
   tilt: false,
-} as const
+}
+
+const DEFAULT_LOOK_VALUES: GlassLookValues = GLASS_LOOK_PRESETS[DEFAULT_LOOK]
+
+/** Look knobs persisted in the Host document, in write order. */
+const LOOK_KEYS = [
+  'refraction', 'bevelDepth', 'bevelWidth', 'frost', 'aberration', 'magnify',
+  'shadow', 'specular',
+] as const satisfies ReadonlyArray<keyof GlassLookValues>
 
 /** Scroll-sync tuning. The wallpaper trails the conversation scrollport at a
  * fixed parallax coefficient (0.25 — visibly alive without feeling detached);
@@ -74,7 +75,7 @@ const WALLPAPER_CLASSES: Record<WallpaperPreset, string> = {
  * plugin's off/on cycle because the library has no lens teardown and its
  * shadow outlives the hidden canvas. */
 interface LiquidGLLensHandle {
-  options: { shadow: boolean }
+  options: GlassLookValues
   setShadow(enabled: boolean): void
 }
 
@@ -125,6 +126,10 @@ export interface LiquidGlassSnapshot {
   /** Surface clarity in percent (0–100); 0 is the shipped calibration, 100
    * fades static surface fills to transparent over the wallpaper. */
   clarity: number
+  /** Named look, or `custom` when the knobs match no calibration. */
+  look: GlassLookId
+  /** Live liquidGL knobs applied to the composer lens. */
+  lookValues: GlassLookValues
 }
 
 /** Owns the overlay surfaces, the token layer, the glassified composer card,
@@ -138,7 +143,7 @@ export class LiquidGlassController {
   /** Live user-visible state; the Settings card subscribes through the inject
    * hooks compartment so dock clicks and Settings writes stay in sync. */
   readonly snapshot: SnapshotStore<LiquidGlassSnapshot>
-  #scope: SettingsScope<LiquidGlassSnapshot> | undefined
+  #scope: SettingsScope<LiquidGlassHostSection> | undefined
   #enabled = true
   #preset: WallpaperPreset = 'ridge'
   /** Custom-image veil strength in percent (0–100). */
@@ -146,6 +151,8 @@ export class LiquidGlassController {
   /** Surface clarity in percent (0–100): 0 is the shipped calibration, 100
    * fades static surface fills to transparent. */
   #clarity = CLARITY_DEFAULT_PERCENT
+  /** Live liquidGL look knobs. Defaults to the shipped `rich` calibration. */
+  #look: GlassLookValues = { ...DEFAULT_LOOK_VALUES }
   /** Object URL of the uploaded custom image; undefined until one loads or is
    * uploaded on this device. */
   #customUrl: string | undefined
@@ -168,6 +175,7 @@ export class LiquidGlassController {
   #longPressed = false
   #veilWriteTimer: ReturnType<typeof setTimeout> | undefined
   #clarityWriteTimer: ReturnType<typeof setTimeout> | undefined
+  #lookWriteTimer: ReturnType<typeof setTimeout> | undefined
   #crossfadeTimer: ReturnType<typeof setTimeout> | undefined
   /** Object URL waiting to be revoked until the outgoing clone that still
    * paints it has been removed. */
@@ -178,6 +186,7 @@ export class LiquidGlassController {
     this.#theme = theme
     this.snapshot = createSnapshotStore({
       enabled: this.#enabled, preset: this.#preset, custom: false, veil: this.#veil, clarity: this.#clarity,
+      look: DEFAULT_LOOK, lookValues: { ...this.#look },
     })
   }
 
@@ -188,13 +197,7 @@ export class LiquidGlassController {
     const blob = await loadCustomWallpaper()
     if (blob === undefined) return
     this.#customUrl = URL.createObjectURL(blob)
-    this.snapshot.set({
-      enabled: this.#enabled,
-      preset: this.#preset,
-      custom: true,
-      veil: this.#veil,
-      clarity: this.#clarity,
-    })
+    this.#publish()
     if (this.#preset === 'custom' && this.#wallpaper !== undefined) {
       this.#crossfadeWallpaper()
     }
@@ -227,7 +230,7 @@ export class LiquidGlassController {
    * @param scope - the bound namespace scope, or undefined to detach.
    * @returns nothing; the subscription lives until the controller tears down.
    */
-  attachSettings(scope: SettingsScope<LiquidGlassSnapshot> | undefined): void {
+  attachSettings(scope: SettingsScope<LiquidGlassHostSection> | undefined): void {
     this.#scope = scope
     if (scope === undefined) return
     scope.subscribe(() => { this.#adopt() })
@@ -238,34 +241,67 @@ export class LiquidGlassController {
   #adopt(): void {
     const section = this.#scope?.getSnapshot()
     if (section === undefined || section.status !== 'ready' || section.value === undefined) return
-    this.#setState(section.value.enabled, section.value.preset, section.value.veil, section.value.clarity)
+    const value = section.value
+    this.#setState({
+      enabled: value.enabled,
+      preset: value.preset,
+      veil: value.veil,
+      clarity: value.clarity,
+      look: {
+        refraction: value.refraction,
+        bevelDepth: value.bevelDepth,
+        bevelWidth: value.bevelWidth,
+        frost: value.frost,
+        aberration: value.aberration,
+        magnify: value.magnify,
+        shadow: value.shadow,
+        specular: value.specular,
+      },
+    })
   }
 
   /** The single state transition: applies surface diffs, publishes, and is
-   * the only place the enabled/preset/veil/clarity quadruple changes. */
-  #setState(enabled: boolean, preset: WallpaperPreset, veil: number, clarity: number): void {
-    if (enabled !== this.#enabled) this.#apply(enabled)
-    if (preset !== this.#preset) {
-      this.#preset = preset
+   * the only place enabled/preset/veil/clarity/look change. */
+  #setState(next: {
+    enabled: boolean
+    preset: WallpaperPreset
+    veil: number
+    clarity: number
+    look: GlassLookValues
+  }): void {
+    if (next.enabled !== this.#enabled) this.#apply(next.enabled)
+    if (next.preset !== this.#preset) {
+      this.#preset = next.preset
       if (this.#wallpaper !== undefined) this.#crossfadeWallpaper()
     }
-    if (veil !== this.#veil) {
-      this.#veil = veil
+    if (next.veil !== this.#veil) {
+      this.#veil = next.veil
       if (this.#wallpaper !== undefined) this.#applyVeil(this.#wallpaper)
     }
-    if (clarity !== this.#clarity) {
-      this.#clarity = clarity
+    if (next.clarity !== this.#clarity) {
+      this.#clarity = next.clarity
       // The token layer only exists while enabled; the next enable registers
       // with the new clarity.
       if (this.#disposeLayer !== undefined) this.#registerLayer()
     }
-    this.#enabled = enabled
+    if (!sameLook(next.look, this.#look)) {
+      this.#look = { ...next.look }
+      this.#applyLook()
+    }
+    this.#enabled = next.enabled
+    this.#publish()
+  }
+
+  /** Publish the live snapshot the Settings card renders from. */
+  #publish(): void {
     this.snapshot.set({
       enabled: this.#enabled,
       preset: this.#preset,
       custom: this.#customUrl !== undefined,
       veil: this.#veil,
       clarity: this.#clarity,
+      look: lookIdFor(this.#look),
+      lookValues: { ...this.#look },
     })
   }
 
@@ -285,7 +321,7 @@ export class LiquidGlassController {
    */
   setEnabled(enabled: boolean): void {
     if (this.#enabled === enabled) return
-    this.#setState(enabled, this.#preset, this.#veil, this.#clarity)
+    this.#setState({ enabled, preset: this.#preset, veil: this.#veil, clarity: this.#clarity, look: this.#look })
     void this.#scope?.set('enabled', enabled)
   }
 
@@ -297,7 +333,7 @@ export class LiquidGlassController {
    */
   setPreset(preset: WallpaperPreset): void {
     if (this.#preset === preset) return
-    this.#setState(this.#enabled, preset, this.#veil, this.#clarity)
+    this.#setState({ enabled: this.#enabled, preset, veil: this.#veil, clarity: this.#clarity, look: this.#look })
     void this.#scope?.set('preset', preset)
   }
 
@@ -311,7 +347,7 @@ export class LiquidGlassController {
    */
   setVeil(percent: number): void {
     if (this.#veil === percent) return
-    this.#setState(this.#enabled, this.#preset, percent, this.#clarity)
+    this.#setState({ enabled: this.#enabled, preset: this.#preset, veil: percent, clarity: this.#clarity, look: this.#look })
     clearTimeout(this.#veilWriteTimer)
     this.#veilWriteTimer = setTimeout(() => {
       this.#veilWriteTimer = undefined
@@ -327,12 +363,47 @@ export class LiquidGlassController {
    */
   setClarity(percent: number): void {
     if (this.#clarity === percent) return
-    this.#setState(this.#enabled, this.#preset, this.#veil, percent)
+    this.#setState({ enabled: this.#enabled, preset: this.#preset, veil: this.#veil, clarity: percent, look: this.#look })
     clearTimeout(this.#clarityWriteTimer)
     this.#clarityWriteTimer = setTimeout(() => {
       this.#clarityWriteTimer = undefined
       void this.#scope?.set('clarity', this.#clarity)
     }, SLIDER_WRITE_DEBOUNCE_MS)
+  }
+
+  /**
+   * Apply a named look calibration from outside (Settings card picker).
+   * Copies that bag onto the live knobs and persists every field.
+   * @param id - a named look, never `custom` (the picker does not offer it).
+   * @returns nothing; each knob queues through the attached scope.
+   */
+  setLook(id: NamedGlassLook): void {
+    this.setLookValues(GLASS_LOOK_PRESETS[id])
+  }
+
+  /**
+   * Apply a look bag from outside (advanced sliders). Immediate on the lens;
+   * Host writes trail the gesture so a drag commits once.
+   * @param values - the full knob bag to apply.
+   * @returns nothing; the write queues debounced through the attached scope.
+   */
+  setLookValues(values: GlassLookValues): void {
+    if (sameLook(values, this.#look)) return
+    this.#setState({
+      enabled: this.#enabled, preset: this.#preset, veil: this.#veil, clarity: this.#clarity, look: values,
+    })
+    clearTimeout(this.#lookWriteTimer)
+    this.#lookWriteTimer = setTimeout(() => {
+      this.#lookWriteTimer = undefined
+      this.#persistLook()
+    }, SLIDER_WRITE_DEBOUNCE_MS)
+  }
+
+  /** Persist every look knob through the attached scope. */
+  #persistLook(): void {
+    const scope = this.#scope
+    if (scope === undefined) return
+    for (const key of LOOK_KEYS) void scope.set(key, this.#look[key])
   }
 
   /** Whether the theme is currently applied. */
@@ -616,6 +687,19 @@ export class LiquidGlassController {
     this.#disposeLayer = this.#theme.overrideTokens(PACKAGE_ID, scaleSurfaceTokens(LIQUID_GLASS_TOKENS, this.#clarity))
   }
 
+  /** Push the live look onto every tracked lens. Numeric knobs are uniforms
+   * the renderer reads from `lens.options` each frame, so a field write is
+   * enough; `setShadow` is the only documented setter because the library's
+   * drop-shadow DOM is created and torn down through it. */
+  #applyLook(): void {
+    const renderer = rendererHandle()
+    if (renderer === undefined) return
+    for (const lens of renderer.lenses) {
+      Object.assign(lens.options, this.#look)
+      lens.setShadow(this.#look.shadow)
+    }
+  }
+
   /** Give the composer card to liquidGL. The library cannot remove a lens, so
    * one card node is glassified exactly once per page; later attachments only
    * re-apply the fill-stripping styles, and a remounted card gets a fresh
@@ -630,7 +714,7 @@ export class LiquidGlassController {
     if (this.#lensCard !== card) {
       this.#lensCard = card
       try {
-        liquidGL({ ...GL_OPTIONS })
+        liquidGL({ ...GL_FIXED, ...this.#look })
       } catch (error) {
         // Marked attempted even on failure: a retry on every DOM mutation
         // would storm, and the library's own no-WebGL path handles the common
@@ -686,9 +770,7 @@ export class LiquidGlassController {
       cancelAnimationFrame(renderer._rafId)
       renderer._rafId = null
     }
-    for (const lens of renderer.lenses) {
-      if (lens.options.shadow) lens.setShadow(false)
-    }
+    for (const lens of renderer.lenses) lens.setShadow(false)
   }
 
   #resumeRenderer(): void {
@@ -698,9 +780,7 @@ export class LiquidGlassController {
     // Re-drive the shadow: the off cycle removed the shadow element and the
     // card's inline shadow went with its restored style attribute; the lens
     // still exists, so the switch re-applies both in one call.
-    for (const lens of renderer.lenses) {
-      if (lens.options.shadow) lens.setShadow(true)
-    }
+    for (const lens of renderer.lenses) lens.setShadow(this.#look.shadow)
     // The renderer binds its snapshot source once at construction. After an
     // off cycle hid the wallpaper — or a teardown+restart replaced it — that
     // element can be detached, and the lens would sample a stale blank
@@ -727,6 +807,7 @@ export class LiquidGlassController {
     clearTimeout(this.#pressTimer)
     clearTimeout(this.#veilWriteTimer)
     clearTimeout(this.#clarityWriteTimer)
+    clearTimeout(this.#lookWriteTimer)
     this.#abortCrossfade()
     this.#teardownScrollSync()
     this.#suspendRenderer()

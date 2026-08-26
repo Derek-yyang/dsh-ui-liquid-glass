@@ -3,21 +3,25 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { apply, Config, SETTINGS_NAMESPACE } from '../src/index.ts'
+import { DEFAULT_LOOK, GLASS_LOOK_PRESETS } from '../src/look.ts'
+
+const RICH = GLASS_LOOK_PRESETS[DEFAULT_LOOK]
+const collage = { enabled: true as const, preset: 'collage' as const, veil: 100, clarity: 0, ...RICH }
 
 describe('ui-liquid-glass host apply', () => {
   it('registers the settings namespace with the composition entry as the base layer', async () => {
     const register = vi.fn(() => ({
-      get: () => ({ enabled: true, preset: 'collage', veil: 100, clarity: 0 }),
+      get: () => collage,
       watch: () => () => {},
     }))
     const ctx = new Context()
     ctx.provide('settings', { register })
 
-    apply(ctx, { enabled: true, preset: 'collage', veil: 100, clarity: 0 })
+    apply(ctx, collage)
     await ctx.inject(['settings'], async () => {}).await()
 
     expect(register).toHaveBeenCalledWith(SETTINGS_NAMESPACE, Config, {
-      base: { enabled: true, preset: 'collage', veil: 100, clarity: 0 },
+      base: collage,
     })
   })
 })

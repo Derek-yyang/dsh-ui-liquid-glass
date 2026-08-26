@@ -24,6 +24,22 @@ import {
   COMPOSER_SELECTOR, GLASS_MARKER, LIQUID_GLASS_TOKENS, MODAL_PANEL_SELECTOR,
   PACKAGE_ID, SEAT_SELECTOR, SIDEBAR_SELECTOR, VEIL_VAR, WALLPAPER_SELECTOR,
 } from '../src/tokens.ts'
+import { DEFAULT_LOOK, GLASS_LOOK_PRESETS } from '../src/look.ts'
+import type { LiquidGlassHostSection } from '../src/look.ts'
+
+const RICH = GLASS_LOOK_PRESETS[DEFAULT_LOOK]
+
+function hostSection(
+  partial: Partial<LiquidGlassHostSection> & Pick<LiquidGlassHostSection, 'enabled' | 'preset'>,
+): LiquidGlassHostSection {
+  return { veil: 100, clarity: 0, ...RICH, ...partial }
+}
+
+function published(partial: Partial<LiquidGlassSnapshot> & Pick<LiquidGlassSnapshot, 'enabled' | 'preset'>): LiquidGlassSnapshot {
+  return {
+    custom: false, veil: 100, clarity: 0, look: DEFAULT_LOOK, lookValues: { ...RICH }, ...partial,
+  }
+}
 
 function bench() {
   const ctx = new Context()
@@ -36,7 +52,7 @@ function bench() {
 
 /** A settings scope stub standing `ready` with the given section; records
  * field writes and republishes on `set`. */
-function scopeStub(section: { enabled: boolean; preset: string; veil: number; clarity: number }) {
+function scopeStub(section: LiquidGlassHostSection) {
   let value = { ...section }
   const listeners = new Set<() => void>()
   const writes: Array<[string, unknown]> = []
@@ -62,21 +78,25 @@ function scopeStub(section: { enabled: boolean; preset: string; veil: number; cl
     },
     unset: (): Promise<void> => Promise.resolve(),
   }
-  return { scope: scope as unknown as SettingsScope<LiquidGlassSnapshot>, writes }
+  return { scope: scope as unknown as SettingsScope<LiquidGlassHostSection>, writes }
 }
 
 /** Install a renderer handle so recapture scheduling can be observed. */
 function installRenderer() {
   const captures = { count: 0 }
+  const lens = {
+    options: { ...RICH },
+    setShadow: vi.fn((enabled: boolean) => { lens.options.shadow = enabled }),
+  }
   ;(window as unknown as Record<'__liquidGLRenderer__', unknown>).__liquidGLRenderer__ = {
     canvas: document.createElement('canvas'),
     _rafId: 0,
     render: () => {},
     snapshotTarget: null,
     captureSnapshot: () => { captures.count += 1 },
-    lenses: [],
+    lenses: [lens],
   }
-  return captures
+  return { captures, lens }
 }
 
 /** Mount a stand-in conversation scrollport at the given scroll position.
@@ -253,7 +273,7 @@ describe('LiquidGlassController', () => {
 
   it('an attached scope holding disabled boots to stock chrome with only the dock mounted', async () => {
     const { controller, overrideTokens } = bench()
-    controller.attachSettings(scopeStub({ enabled: false, preset: 'ridge', veil: 100, clarity: 0 }).scope)
+    controller.attachSettings(scopeStub(hostSection({ enabled: false, preset: 'ridge' })).scope)
     const dispose = controller.start()
     try {
       mountCard()
@@ -312,7 +332,7 @@ describe('LiquidGlassController', () => {
   })
 
   it('scroll-syncs the wallpaper at the parallax coefficient, clamps to the headroom, and never recaptures the snapshot', async () => {
-    const captures = installRenderer()
+    const { captures } = installRenderer()
     const { controller } = bench()
     const dispose = controller.start()
     try {
@@ -383,7 +403,7 @@ describe('LiquidGlassController', () => {
     }
 
     const second = bench()
-    second.controller.attachSettings(scopeStub({ enabled: true, preset: 'collage', veil: 100, clarity: 0 }).scope)
+    second.controller.attachSettings(scopeStub(hostSection({ enabled: true, preset: 'collage' })).scope)
     const disposeSecond = second.controller.start()
     try {
       const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
@@ -396,7 +416,7 @@ describe('LiquidGlassController', () => {
   it('long-press cycles the preset, persists it, recaptures, and swallows the trailing click', async () => {
     vi.useFakeTimers()
     try {
-      const captures = installRenderer()
+      const { captures } = installRenderer()
       const { controller } = bench()
       const dispose = controller.start()
       try {
@@ -434,7 +454,7 @@ describe('LiquidGlassController', () => {
         expect(dock.getAttribute('aria-pressed')).toBe('false')
         expect(wallpaper.className).toContain(css.collage)
         // The long-press cycle and the trailing toggle both published.
-        expect(controller.snapshot.getSnapshot()).toEqual({ enabled: false, preset: 'collage', custom: false, veil: 100, clarity: 0 })
+        expect(controller.snapshot.getSnapshot()).toEqual(published({ enabled: false, preset: 'collage' }))
       } finally {
         dispose()
       }
@@ -446,9 +466,9 @@ describe('LiquidGlassController', () => {
   it('setEnabled and setPreset drive the surfaces, queue scope writes, and publish to the snapshot', async () => {
     vi.useFakeTimers()
     try {
-      const captures = installRenderer()
+      const { captures } = installRenderer()
       const { controller } = bench()
-      const settings = scopeStub({ enabled: true, preset: 'ridge', veil: 100, clarity: 0 })
+      const settings = scopeStub(hostSection({ enabled: true, preset: 'ridge' }))
       controller.attachSettings(settings.scope)
       const dispose = controller.start()
       try {
@@ -470,7 +490,7 @@ describe('LiquidGlassController', () => {
 
         controller.setEnabled(true)
         expect(settings.writes).toEqual([['enabled', false], ['enabled', true]])
-        expect(controller.snapshot.getSnapshot()).toEqual({ enabled: true, preset: 'ridge', custom: false, veil: 100, clarity: 0 })
+        expect(controller.snapshot.getSnapshot()).toEqual(published({ enabled: true, preset: 'ridge' }))
 
         controller.setPreset('collage')
         expect(settings.writes).toEqual([['enabled', false], ['enabled', true], ['preset', 'collage']])
@@ -496,7 +516,7 @@ describe('LiquidGlassController', () => {
   it('a second preset swap aborts the in-flight fade so only one outgoing clone exists', async () => {
     vi.useFakeTimers()
     try {
-      const captures = installRenderer()
+      const { captures } = installRenderer()
       const { controller } = bench()
       const dispose = controller.start()
       try {
@@ -526,7 +546,7 @@ describe('LiquidGlassController', () => {
   it('turning the theme off mid-fade drops the outgoing clone without recapturing', async () => {
     vi.useFakeTimers()
     try {
-      const captures = installRenderer()
+      const { captures } = installRenderer()
       const { controller } = bench()
       const dispose = controller.start()
       try {
@@ -549,7 +569,7 @@ describe('LiquidGlassController', () => {
     vi.useFakeTimers()
     try {
       const { controller } = bench()
-      const settings = scopeStub({ enabled: true, preset: 'custom', veil: 100, clarity: 0 })
+      const settings = scopeStub(hostSection({ enabled: true, preset: 'custom' }))
       controller.attachSettings(settings.scope)
       const dispose = controller.start()
       try {
@@ -585,7 +605,7 @@ describe('LiquidGlassController', () => {
 
   it('an adopted section carries its veil onto the wallpaper', () => {
     const { controller } = bench()
-    controller.attachSettings(scopeStub({ enabled: true, preset: 'collage', veil: 45, clarity: 0 }).scope)
+    controller.attachSettings(scopeStub(hostSection({ enabled: true, preset: 'collage', veil: 45 })).scope)
     const dispose = controller.start()
     try {
       const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
@@ -600,7 +620,7 @@ describe('LiquidGlassController', () => {
     vi.useFakeTimers()
     try {
       const { controller, overrideTokens, disposeLayer } = bench()
-      const settings = scopeStub({ enabled: true, preset: 'ridge', veil: 100, clarity: 0 })
+      const settings = scopeStub(hostSection({ enabled: true, preset: 'ridge' }))
       controller.attachSettings(settings.scope)
       const dispose = controller.start()
       try {
@@ -640,7 +660,7 @@ describe('LiquidGlassController', () => {
 
   it('an adopted clarity re-registers the layer scaled', () => {
     const { controller, overrideTokens } = bench()
-    controller.attachSettings(scopeStub({ enabled: true, preset: 'collage', veil: 100, clarity: 100 }).scope)
+    controller.attachSettings(scopeStub(hostSection({ enabled: true, preset: 'collage', clarity: 100 })).scope)
     const dispose = controller.start()
     try {
       expect(overrideTokens).toHaveBeenCalledTimes(1)
@@ -742,6 +762,52 @@ describe('LiquidGlassController', () => {
       expect(wallpaper.style.transform).toBe('')
     } finally {
       dispose()
+    }
+  })
+
+  it('setLook copies a named calibration onto the live lens and persists every knob', async () => {
+    vi.useFakeTimers()
+    try {
+      const { lens } = installRenderer()
+      const { controller } = bench()
+      const settings = scopeStub(hostSection({ enabled: true, preset: 'ridge' }))
+      controller.attachSettings(settings.scope)
+      const dispose = controller.start()
+      try {
+        expect(controller.snapshot.getSnapshot().look).toBe('rich')
+        controller.setLook('restrained')
+        expect(controller.snapshot.getSnapshot().look).toBe('restrained')
+        expect(controller.snapshot.getSnapshot().lookValues).toEqual(GLASS_LOOK_PRESETS.restrained)
+        expect(lens.options.refraction).toBe(GLASS_LOOK_PRESETS.restrained.refraction)
+        expect(lens.setShadow).toHaveBeenCalledWith(true)
+        await vi.advanceTimersByTime(250)
+        expect(settings.writes.filter(([field]) => field === 'refraction')).toEqual([['refraction', GLASS_LOOK_PRESETS.restrained.refraction]])
+      } finally {
+        dispose()
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('setLookValues marks the look custom and hot-updates the lens without recreating it', async () => {
+    vi.useFakeTimers()
+    try {
+      const { lens } = installRenderer()
+      const { controller } = bench()
+      const dispose = controller.start()
+      try {
+        const callsBefore = liquidGLMock.mock.calls.length
+        controller.setLookValues({ ...RICH, refraction: 0.09 })
+        expect(controller.snapshot.getSnapshot().look).toBe('custom')
+        expect(lens.options.refraction).toBe(0.09)
+        expect(liquidGLMock.mock.calls.length).toBe(callsBefore)
+        await vi.advanceTimersByTime(250)
+      } finally {
+        dispose()
+      }
+    } finally {
+      vi.useRealTimers()
     }
   })
 })

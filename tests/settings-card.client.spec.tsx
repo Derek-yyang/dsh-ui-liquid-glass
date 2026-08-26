@@ -14,6 +14,15 @@ import { LiquidGlassSettingsCard } from '../src/client/settings-card.tsx'
 import type { LiquidGlassSettingsCardProps } from '../src/client/settings-card.tsx'
 import type { LiquidGlassSnapshot } from '../src/client/controller.ts'
 import { en } from '../src/client/locales.ts'
+import { DEFAULT_LOOK, GLASS_LOOK_PRESETS } from '../src/look.ts'
+
+const RICH = GLASS_LOOK_PRESETS[DEFAULT_LOOK]
+
+function cardState(partial: Partial<LiquidGlassSnapshot> & Pick<LiquidGlassSnapshot, 'enabled' | 'preset'>): LiquidGlassSnapshot {
+  return {
+    custom: false, veil: 100, clarity: 0, look: DEFAULT_LOOK, lookValues: { ...RICH }, ...partial,
+  }
+}
 
 afterEach(() => { cleanup() })
 
@@ -36,6 +45,8 @@ function mount(snapshot: LiquidGlassSnapshot) {
   const setPreset = vi.fn()
   const setVeil = vi.fn()
   const setClarity = vi.fn()
+  const setLook = vi.fn()
+  const setLookValues = vi.fn()
   const uploadCustom = vi.fn(async (_image: File) => {})
   const props: LiquidGlassSettingsCardProps = {
     useSessions: emptySessions(),
@@ -45,11 +56,13 @@ function mount(snapshot: LiquidGlassSnapshot) {
     setPreset,
     setVeil,
     setClarity,
+    setLook,
+    setLookValues,
     uploadCustom,
     t: makeTranslate(en),
   }
   render(<LiquidGlassSettingsCard {...props} />)
-  return { store, setEnabled, setPreset, setVeil, setClarity, uploadCustom }
+  return { store, setEnabled, setPreset, setVeil, setClarity, setLook, setLookValues, uploadCustom }
 }
 
 function openBody(): void {
@@ -58,7 +71,7 @@ function openBody(): void {
 
 describe('LiquidGlassSettingsCard', () => {
   it('the collapsed header carries the title; expanding reveals the toggle and preset selector', () => {
-    mount({ enabled: false, preset: 'ridge', custom: false, veil: 100, clarity: 0 })
+    mount(cardState({ enabled: false, preset: 'ridge' }))
     expect(screen.queryByRole('button', { name: 'Off' })).toBeNull()
     openBody()
     const toggle = screen.getByRole('button', { name: 'Off' })
@@ -67,18 +80,18 @@ describe('LiquidGlassSettingsCard', () => {
   })
 
   it('the toggle routes clicks to setEnabled and re-renders from published snapshots', () => {
-    const { store, setEnabled } = mount({ enabled: false, preset: 'ridge', custom: false, veil: 100, clarity: 0 })
+    const { store, setEnabled } = mount(cardState({ enabled: false, preset: 'ridge' }))
     openBody()
     fireEvent.click(screen.getByRole('button', { name: 'Off' }))
     expect(setEnabled).toHaveBeenCalledWith(true)
 
     // Dock clicks and long-press cycles publish through the same store.
-    act(() => { store.set({ enabled: true, preset: 'ridge', custom: false, veil: 100, clarity: 0 }) })
+    act(() => { store.set(cardState({ enabled: true, preset: 'ridge' })) })
     expect(screen.getByRole('button', { name: 'On' }).getAttribute('aria-pressed')).toBe('true')
   })
 
   it('the preset selector shows the active preset and routes the menu pick to setPreset', () => {
-    const { setPreset } = mount({ enabled: true, preset: 'ridge', custom: false, veil: 100, clarity: 0 })
+    const { setPreset } = mount(cardState({ enabled: true, preset: 'ridge' }))
     openBody()
     fireEvent.click(screen.getByRole('button', { name: 'Ridge line art' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Gradient collage' }))
@@ -86,7 +99,7 @@ describe('LiquidGlassSettingsCard', () => {
   })
 
   it('the upload button routes the chosen file to uploadCustom', () => {
-    const { uploadCustom } = mount({ enabled: true, preset: 'ridge', custom: false, veil: 100, clarity: 0 })
+    const { uploadCustom } = mount(cardState({ enabled: true, preset: 'ridge' }))
     openBody()
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     const image = new File(['png'], 'wall.png', { type: 'image/png' })
@@ -95,7 +108,7 @@ describe('LiquidGlassSettingsCard', () => {
   })
 
   it('the custom preset appears in the menu only after an upload exists', () => {
-    mount({ enabled: true, preset: 'custom', custom: true, veil: 60, clarity: 0 })
+    mount(cardState({ enabled: true, preset: 'custom', custom: true, veil: 60 }))
     openBody()
     fireEvent.click(screen.getByRole('button', { name: 'Custom image' }))
     expect(screen.getByRole('menuitem', { name: 'Custom image' })).toBeDefined()
@@ -103,12 +116,12 @@ describe('LiquidGlassSettingsCard', () => {
 
   it('the veil slider renders only for the custom preset, shows the percent, and routes changes to setVeil', () => {
     // The veil paints only the custom image; other presets hide the row.
-    mount({ enabled: true, preset: 'ridge', custom: false, veil: 100, clarity: 0 })
+    mount(cardState({ enabled: true, preset: 'ridge' }))
     openBody()
     expect(screen.queryByRole('slider', { name: 'Veil strength' })).toBeNull()
 
     cleanup()
-    const { setVeil } = mount({ enabled: true, preset: 'custom', custom: true, veil: 60, clarity: 0 })
+    const { setVeil } = mount(cardState({ enabled: true, preset: 'custom', custom: true, veil: 60 }))
     openBody()
     const slider = screen.getByRole('slider', { name: 'Veil strength' }) as HTMLInputElement
     expect(slider.value).toBe('60')
@@ -118,12 +131,31 @@ describe('LiquidGlassSettingsCard', () => {
   })
 
   it('the clarity slider renders for every preset and routes changes to setClarity', () => {
-    const { setClarity } = mount({ enabled: true, preset: 'ridge', custom: false, veil: 100, clarity: 40 })
+    const { setClarity } = mount(cardState({ enabled: true, preset: 'ridge', clarity: 40 }))
     openBody()
     const slider = screen.getByRole('slider', { name: 'Clarity' }) as HTMLInputElement
     expect(slider.value).toBe('40')
     expect(screen.getByText('40%')).toBeDefined()
     fireEvent.change(slider, { target: { value: '100' } })
     expect(setClarity).toHaveBeenCalledWith(100)
+  })
+
+  it('the look picker shows the active look and routes a named pick to setLook', () => {
+    const { setLook } = mount(cardState({ enabled: true, preset: 'ridge' }))
+    openBody()
+    fireEvent.click(screen.getByRole('button', { name: 'Rich' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Restrained' }))
+    expect(setLook).toHaveBeenCalledWith('restrained')
+  })
+
+  it('advanced knobs stay collapsed until opened, then route a refraction drag to setLookValues', () => {
+    const { setLookValues } = mount(cardState({ enabled: true, preset: 'ridge' }))
+    openBody()
+    expect(screen.queryByRole('slider', { name: 'Refraction' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+    const slider = screen.getByRole('slider', { name: 'Refraction' }) as HTMLInputElement
+    expect(slider.value).toBe(String(RICH.refraction))
+    fireEvent.change(slider, { target: { value: '0.09' } })
+    expect(setLookValues).toHaveBeenCalledWith({ ...RICH, refraction: 0.09 })
   })
 })

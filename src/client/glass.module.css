@@ -319,3 +319,23 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+.advancedToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.advancedBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

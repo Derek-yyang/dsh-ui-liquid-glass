@@ -1,13 +1,17 @@
 /** The Liquid Glass card inside the Plugins settings section's configurable
- * tab: the theme toggle, the wallpaper preset selector, and the custom-image
- * upload, driven through the controller's inject face and its published
- * snapshot. */
+ * tab: the theme toggle, the look picker, the wallpaper preset selector, and
+ * the custom-image upload, driven through the controller's inject face and
+ * its published snapshot. */
 
 import { useRef, useState, type ReactNode } from 'react'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { WallpaperPreset } from '../tokens.ts'
+import {
+  GLASS_LOOKS, GLASS_LOOK_SLIDER_KEYS, GLASS_LOOK_SLIDERS,
+} from '../look.ts'
+import type { GlassLookId, GlassLookValues, NamedGlassLook } from '../look.ts'
 import type { LiquidGlassSnapshot } from './controller.ts'
 import type { LiquidGlassLocaleKey } from './locales.ts'
 import css from './glass.module.css'
@@ -26,6 +30,10 @@ export interface LiquidGlassSettingsCardInjected {
   setVeil(percent: number): void
   /** Scale the glass surface tint clarity (0–100). */
   setClarity(percent: number): void
+  /** Apply a named look calibration. */
+  setLook(id: NamedGlassLook): void
+  /** Apply a full look bag (advanced sliders). */
+  setLookValues(values: GlassLookValues): void
   /** Persist an uploaded image and make it the active preset. */
   uploadCustom(image: File): Promise<void>
 }
@@ -43,16 +51,42 @@ const PRESETS: readonly { id: WallpaperPreset; label: LiquidGlassLocaleKey }[] =
   { id: 'collage', label: 'presetCollage' },
 ]
 
+const LOOK_LABEL: Record<GlassLookId, LiquidGlassLocaleKey> = {
+  restrained: 'lookRestrained',
+  standard: 'lookStandard',
+  rich: 'lookRich',
+  custom: 'lookCustom',
+}
+
+const KNOB_LABEL: Record<(typeof GLASS_LOOK_SLIDER_KEYS)[number], LiquidGlassLocaleKey> = {
+  refraction: 'knobRefraction',
+  bevelDepth: 'knobBevelDepth',
+  bevelWidth: 'knobBevelWidth',
+  frost: 'knobFrost',
+  aberration: 'knobAberration',
+  magnify: 'knobMagnify',
+}
+
+/** Format a look-knob number for the readout: integers stay integers, fractions
+ * keep three significant decimals so the slider does not jitter the label. */
+function formatKnob(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+}
+
 /** Render the Liquid Glass preference card.
  * @param props - locale copy, the state store, and the write paths.
  * @returns the card, or nothing while the namespace has not loaded.
  */
 export function LiquidGlassSettingsCard(
-  { useSnapshot, setEnabled, setPreset, setVeil, setClarity, uploadCustom, t }: LiquidGlassSettingsCardProps,
+  {
+    useSnapshot, setEnabled, setPreset, setVeil, setClarity, setLook, setLookValues, uploadCustom, t,
+  }: LiquidGlassSettingsCardProps,
 ): ReactNode {
   const snapshot = useSnapshot(value => value)
   const [open, setOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [lookMenuOpen, setLookMenuOpen] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const fileInput = useRef<HTMLInputElement | null>(null)
   const presetLabel = (id: WallpaperPreset): LiquidGlassLocaleKey => {
     if (id === 'custom') return 'presetCustom'
@@ -61,6 +95,10 @@ export function LiquidGlassSettingsCard(
   const menuItems = [
     ...PRESETS.map(preset => ({ id: preset.id, label: t(preset.label) })),
     ...(snapshot.custom ? [{ id: 'custom' as WallpaperPreset, label: t('presetCustom') }] : []),
+  ]
+  const lookItems = [
+    ...GLASS_LOOKS.map(id => ({ id, label: t(LOOK_LABEL[id]) })),
+    ...(snapshot.look === 'custom' ? [{ id: 'custom' as GlassLookId, label: t('lookCustom') }] : []),
   ]
 
   return (
@@ -112,6 +150,37 @@ export function LiquidGlassSettingsCard(
                 />
                 <span className={css.settingsSliderValue}>{snapshot.clarity}%</span>
               </span>
+            </div>
+            <div className={css.settingsRow}>
+              <div className={css.settingsRowText}>
+                <div className={css.settingsRowTitle}>{t('lookTitle')}</div>
+                <div className={css.settingsRowDesc}>{t('lookDescription')}</div>
+              </div>
+              <Menu
+                open={lookMenuOpen}
+                onClose={() => { setLookMenuOpen(false) }}
+                items={lookItems}
+                selectedId={snapshot.look}
+                onSelect={(id) => {
+                  setLookMenuOpen(false)
+                  if (id === 'custom') return
+                  setLook(id as NamedGlassLook)
+                }}
+                align="end"
+                portal
+                anchor={(
+                  <button
+                    type="button"
+                    className={css.settingsSelector}
+                    aria-haspopup="menu"
+                    aria-expanded={lookMenuOpen}
+                    onClick={() => { setLookMenuOpen(value => !value) }}
+                  >
+                    {t(LOOK_LABEL[snapshot.look])}
+                    <IconChevronDownOutline14 size={12} aria-hidden="true" />
+                  </button>
+                )}
+              />
             </div>
             <div className={css.settingsRow}>
               <div className={css.settingsRowText}>
@@ -189,6 +258,82 @@ export function LiquidGlassSettingsCard(
                 </span>
               </div>
             )}
+            <div>
+              <button
+                type="button"
+                className={css.advancedToggle}
+                aria-expanded={advancedOpen}
+                onClick={() => { setAdvancedOpen(value => !value) }}
+              >
+                <span className={css.settingsRowText}>
+                  <span className={css.settingsRowTitle}>{t('advancedTitle')}</span>
+                  <span className={css.settingsRowDesc}>{t('advancedDescription')}</span>
+                </span>
+                <IconChevronDownOutline14 size={12} aria-hidden="true" />
+              </button>
+              {advancedOpen
+                ? (
+                  <div className={css.advancedBody}>
+                    {GLASS_LOOK_SLIDER_KEYS.map((key) => {
+                      const spec = GLASS_LOOK_SLIDERS[key]
+                      const value = snapshot.lookValues[key]
+                      return (
+                        <div className={css.settingsRow} key={key}>
+                          <div className={css.settingsRowText}>
+                            <div className={css.settingsRowTitle}>{t(KNOB_LABEL[key])}</div>
+                          </div>
+                          <span className={css.settingsSliderGroup}>
+                            <input
+                              type="range"
+                              className={css.settingsSlider}
+                              min={spec.min}
+                              max={spec.max}
+                              step={spec.step}
+                              value={value}
+                              aria-label={t(KNOB_LABEL[key])}
+                              onChange={(event) => {
+                                setLookValues({ ...snapshot.lookValues, [key]: Number(event.target.value) })
+                              }}
+                            />
+                            <span className={css.settingsSliderValue}>{formatKnob(value)}</span>
+                          </span>
+                        </div>
+                      )
+                    })}
+                    <div className={css.settingsRow}>
+                      <div className={css.settingsRowText}>
+                        <div className={css.settingsRowTitle}>{t('knobShadow')}</div>
+                      </div>
+                      <button
+                        type="button"
+                        className={css.settingsToggle}
+                        aria-pressed={snapshot.lookValues.shadow}
+                        onClick={() => {
+                          setLookValues({ ...snapshot.lookValues, shadow: !snapshot.lookValues.shadow })
+                        }}
+                      >
+                        {snapshot.lookValues.shadow ? t('stateOn') : t('stateOff')}
+                      </button>
+                    </div>
+                    <div className={css.settingsRow}>
+                      <div className={css.settingsRowText}>
+                        <div className={css.settingsRowTitle}>{t('knobSpecular')}</div>
+                      </div>
+                      <button
+                        type="button"
+                        className={css.settingsToggle}
+                        aria-pressed={snapshot.lookValues.specular}
+                        onClick={() => {
+                          setLookValues({ ...snapshot.lookValues, specular: !snapshot.lookValues.specular })
+                        }}
+                      >
+                        {snapshot.lookValues.specular ? t('stateOn') : t('stateOff')}
+                      </button>
+                    </div>
+                  </div>
+                )
+                : null}
+            </div>
           </div>
         )
         : null}
