@@ -1,0 +1,677 @@
+/** Controller behavior: deferred card attachment, toggle persistence, surface
+ * lifecycle, scroll-synced wallpaper, and teardown. Every test disposes in
+ * `finally`: a leaked controller's MutationObserver would keep glassifying
+ * later tests' cards. */
+// @vitest-environment jsdom
+import { Context } from '@deepseek-ai/cordis'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const { liquidGLMock } = vi.hoisted(() => ({
+  liquidGLMock: vi.fn<(options: unknown) => { el: null }>(() => ({ el: null })),
+}))
+
+vi.mock('liquid-gl', () => ({
+  default: Object.assign(liquidGLMock, { registerDynamic: vi.fn() }),
+}))
+
+import { LiquidGlassController } from '../src/client/controller.ts'
+import type { LiquidGlassSnapshot } from '../src/client/controller.ts'
+import type { ThemeTokenOverrides } from '@deepseek-ai/dsh-client-ui-theme/client'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
+import css from '../src/client/glass.module.css'
+import {
+  COMPOSER_SELECTOR, GLASS_MARKER, LIQUID_GLASS_TOKENS, MODAL_PANEL_SELECTOR,
+  PACKAGE_ID, SEAT_SELECTOR, SIDEBAR_SELECTOR, VEIL_VAR, WALLPAPER_SELECTOR,
+} from '../src/tokens.ts'
+
+function bench() {
+  const ctx = new Context()
+  const disposeLayer = vi.fn()
+  const overrideTokens = vi.fn((_id: string, _tokens: ThemeTokenOverrides) => disposeLayer)
+  ctx.provide('theme', { overrideTokens } as unknown as ThemeRuntime)
+  const controller = new LiquidGlassController(ctx.theme)
+  return { controller, overrideTokens, disposeLayer }
+}
+
+/** A settings scope stub standing `ready` with the given section; records
+ * field writes and republishes on `set`. */
+function scopeStub(section: { enabled: boolean; preset: string; veil: number; clarity: number }) {
+  let value = { ...section }
+  const listeners = new Set<() => void>()
+  const writes: Array<[string, unknown]> = []
+  const scope = {
+    getSnapshot: () => ({
+      status: 'ready' as const,
+      value,
+      base: undefined,
+      user: undefined,
+      revision: 1,
+      writable: true,
+      mode: 'host' as const,
+    }),
+    subscribe: (listener: () => void): (() => void) => {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+    set: (field: string, next: unknown): Promise<void> => {
+      writes.push([field, next])
+      value = { ...value, [field]: next }
+      for (const listener of [...listeners]) listener()
+      return Promise.resolve()
+    },
+    unset: (): Promise<void> => Promise.resolve(),
+  }
+  return { scope: scope as unknown as SettingsScope<LiquidGlassSnapshot>, writes }
+}
+
+/** Install a renderer handle so recapture scheduling can be observed. */
+function installRenderer() {
+  const captures = { count: 0 }
+  ;(window as unknown as Record<'__liquidGLRenderer__', unknown>).__liquidGLRenderer__ = {
+    canvas: document.createElement('canvas'),
+    _rafId: 0,
+    render: () => {},
+    snapshotTarget: null,
+    captureSnapshot: () => { captures.count += 1 },
+    lenses: [],
+  }
+  return captures
+}
+
+/** Mount a stand-in conversation scrollport at the given scroll position.
+ * scrollTop is defined directly: jsdom has no layout to produce one. */
+function mountScroller(scrollTop: number): HTMLElement {
+  const scroller = document.createElement('div')
+  scroller.setAttribute('data-conversation-scroll', '')
+  Object.defineProperty(scroller, 'scrollTop', { value: scrollTop, configurable: true })
+  document.body.append(scroller)
+  return scroller
+}
+
+function setScrollTop(scroller: HTMLElement, value: number): void {
+  Object.defineProperty(scroller, 'scrollTop', { value, configurable: true })
+}
+
+function dispatchScroll(target: EventTarget): void {
+  target.dispatchEvent(new Event('scroll'))
+}
+
+/** Mount a stand-in composer card carrying its own token fill. */
+function mountCard(): HTMLElement {
+  const card = document.createElement('div')
+  card.setAttribute('data-composer-card', '')
+  card.style.background = 'rgb(255, 255, 255)'
+  document.body.append(card)
+  return card
+}
+
+beforeEach(() => {
+  localStorage.clear()
+  liquidGLMock.mockClear()
+  delete (window as unknown as Record<string, unknown>).__liquidGLRenderer__
+  document.body.innerHTML = ''
+  document.head.innerHTML = ''
+})
+
+describe('LiquidGlassController', () => {
+  it('starts enabled: surfaces mounted, token layer registered, dock pressed, glass deferred until the card mounts', () => {
+    const { controller, overrideTokens } = bench()
+    const dispose = controller.start()
+    try {
+      expect(overrideTokens).toHaveBeenCalledTimes(1)
+      expect(overrideTokens).toHaveBeenCalledWith(PACKAGE_ID, LIQUID_GLASS_TOKENS)
+      expect(document.querySelector(WALLPAPER_SELECTOR)).not.toBeNull()
+      expect(document.querySelector('style')?.textContent).toContain(SEAT_SELECTOR)
+      expect(document.querySelector('style')?.textContent).toContain(`${SIDEBAR_SELECTOR}{backdrop-filter:blur(20px)`)
+      expect(document.querySelector('style')?.textContent).toContain(`${MODAL_PANEL_SELECTOR}{backdrop-filter:blur(20px)`)
+      const dock = document.querySelector('[data-dsh-liquid-glass-dock]')
+      expect(dock).not.toBeNull()
+      expect(dock?.getAttribute('aria-pressed')).toBe('true')
+      expect(liquidGLMock).not.toHaveBeenCalled()
+    } finally {
+      dispose()
+    }
+  })
+
+  it('glassifies the composer card once it mounts, stripping its fill', async () => {
+    const { controller } = bench()
+    const dispose = controller.start()
+    try {
+      const card = mountCard()
+      await vi.waitFor(() => {
+        expect(liquidGLMock).toHaveBeenCalledTimes(1)
+      })
+      expect(liquidGLMock).toHaveBeenCalledWith(expect.objectContaining({
+        target: COMPOSER_SELECTOR,
+        snapshot: WALLPAPER_SELECTOR,
+        refraction: 0.06,
+        shadow: true,
+      }))
+      expect(card.getAttribute(GLASS_MARKER)).toBe('')
+      expect(card.style.background).toBe('transparent')
+    } finally {
+      dispose()
+    }
+  })
+
+  it('toggling off disposes the layer, hides the surfaces, restores the card fill, keeps the dock', async () => {
+    const { controller, disposeLayer } = bench()
+    const dispose = controller.start()
+    try {
+      const card = mountCard()
+      await vi.waitFor(() => {
+        expect(liquidGLMock).toHaveBeenCalledTimes(1)
+      })
+      ;(document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement).click()
+      expect(disposeLayer).toHaveBeenCalledTimes(1)
+      // The wallpaper is hidden, not removed: the renderer's snapshot source
+      // stays bound to this exact element across the off cycle.
+      const wallpaper = document.querySelector(WALLPAPER_SELECTOR)
+      expect(wallpaper).not.toBeNull()
+      expect((wallpaper as HTMLElement).style.display).toBe('none')
+      expect(document.querySelector('style')).toBeNull()
+      expect(card.getAttribute(GLASS_MARKER)).toBeNull()
+      expect(card.style.background).toBe('rgb(255, 255, 255)')
+      expect(controller.snapshot.getSnapshot().enabled).toBe(false)
+      expect(controller.enabled).toBe(false)
+    } finally {
+      dispose()
+    }
+  })
+
+  it('re-enabling re-registers the layer and re-strips the card without a second lens', async () => {
+    const { controller, overrideTokens, disposeLayer } = bench()
+    const dispose = controller.start()
+    try {
+      const card = mountCard()
+      await vi.waitFor(() => {
+        expect(liquidGLMock).toHaveBeenCalledTimes(1)
+      })
+      const dock = document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement
+      dock.click()
+      dock.click()
+      expect(disposeLayer).toHaveBeenCalledTimes(1)
+      expect(overrideTokens).toHaveBeenCalledTimes(2)
+      expect(liquidGLMock).toHaveBeenCalledTimes(1) // no duplicate lens on off→on
+      expect(document.querySelector(WALLPAPER_SELECTOR)).not.toBeNull()
+      expect(card.getAttribute(GLASS_MARKER)).toBe('')
+      expect(card.style.background).toBe('transparent')
+      expect(controller.snapshot.getSnapshot().enabled).toBe(true)
+    } finally {
+      dispose()
+    }
+  })
+
+  it('off→on keeps the renderer alive: hides canvas and wallpaper, re-points the snapshot source, re-captures, and re-drives the shadow', async () => {
+    let captures = 0
+    const setShadow = vi.fn()
+    const renderer = {
+      canvas: document.createElement('canvas'),
+      _rafId: 0 as number | null,
+      render: () => {},
+      snapshotTarget: null as unknown as Element,
+      captureSnapshot: () => { captures += 1 },
+      lenses: [{ options: { shadow: true }, setShadow }],
+    }
+    ;(window as unknown as Record<'__liquidGLRenderer__', unknown>).__liquidGLRenderer__ = renderer
+    const { controller } = bench()
+    const dispose = controller.start()
+    try {
+      mountCard()
+      await vi.waitFor(() => {
+        expect(liquidGLMock).toHaveBeenCalledTimes(1)
+      })
+      const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+      // Start enabled: the handle is adopted, the snapshot source re-pointed
+      // at the live wallpaper, a capture forced, and the shadow re-driven.
+      expect(renderer.snapshotTarget).toBe(wallpaper)
+      const capturesAtStart = captures
+      expect(capturesAtStart).toBeGreaterThan(0)
+      expect(renderer.canvas.style.display).toBe('')
+      expect(setShadow).toHaveBeenCalledWith(true)
+
+      const dock = document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement
+      dock.click()
+      expect(renderer.canvas.style.display).toBe('none')
+      expect(wallpaper.style.display).toBe('none')
+      // The shadow is a fixed element on body: switched off with the canvas.
+      expect(setShadow).toHaveBeenLastCalledWith(false)
+
+      dock.click()
+      expect(renderer.canvas.style.display).toBe('')
+      expect(wallpaper.style.display).toBe('')
+      expect(renderer.snapshotTarget).toBe(wallpaper)
+      expect(captures).toBeGreaterThan(capturesAtStart)
+      expect(setShadow).toHaveBeenLastCalledWith(true)
+    } finally {
+      if (renderer._rafId !== null) cancelAnimationFrame(renderer._rafId)
+      delete (window as unknown as Record<string, unknown>).__liquidGLRenderer__
+      dispose()
+    }
+  })
+
+  it('an attached scope holding disabled boots to stock chrome with only the dock mounted', async () => {
+    const { controller, overrideTokens } = bench()
+    controller.attachSettings(scopeStub({ enabled: false, preset: 'ridge', veil: 100, clarity: 0 }).scope)
+    const dispose = controller.start()
+    try {
+      mountCard()
+      await new Promise((resolve) => { setTimeout(resolve, 20) })
+      expect(overrideTokens).not.toHaveBeenCalled()
+      expect(document.querySelector(WALLPAPER_SELECTOR)).toBeNull()
+      expect(document.querySelector('[data-dsh-liquid-glass-dock]')).not.toBeNull()
+      expect(liquidGLMock).not.toHaveBeenCalled()
+    } finally {
+      dispose()
+    }
+  })
+
+  it('teardown removes every surface, disposes the layer, restores the card, and detaches the observer', async () => {
+    const { controller, disposeLayer } = bench()
+    const dispose = controller.start()
+    try {
+      const card = mountCard()
+      await vi.waitFor(() => {
+        expect(liquidGLMock).toHaveBeenCalledTimes(1)
+      })
+      dispose()
+      expect(disposeLayer).toHaveBeenCalledTimes(1)
+      expect(document.querySelector('[data-dsh-liquid-glass-dock]')).toBeNull()
+      expect(document.querySelector(WALLPAPER_SELECTOR)).toBeNull()
+      expect(document.querySelector('style')).toBeNull()
+      expect(card.getAttribute(GLASS_MARKER)).toBeNull()
+      expect(card.style.background).toBe('rgb(255, 255, 255)')
+      // A card mounting after teardown must not be glassified.
+      liquidGLMock.mockClear()
+      mountCard()
+      await new Promise((resolve) => { setTimeout(resolve, 20) })
+      expect(liquidGLMock).not.toHaveBeenCalled()
+    } finally {
+      dispose()
+    }
+  })
+
+  it('a remounted card gets a fresh lens while the orphaned one is not re-created', async () => {
+    const { controller } = bench()
+    const dispose = controller.start()
+    try {
+      const first = mountCard()
+      await vi.waitFor(() => {
+        expect(liquidGLMock).toHaveBeenCalledTimes(1)
+      })
+      first.remove()
+      const second = mountCard()
+      await vi.waitFor(() => {
+        expect(liquidGLMock).toHaveBeenCalledTimes(2)
+      })
+      expect(second.getAttribute(GLASS_MARKER)).toBe('')
+    } finally {
+      dispose()
+    }
+  })
+
+  it('scroll-syncs the wallpaper at the parallax coefficient, clamps to the headroom, and never recaptures the snapshot', async () => {
+    const captures = installRenderer()
+    const { controller } = bench()
+    const dispose = controller.start()
+    try {
+      mountCard()
+      await vi.waitFor(() => {
+        expect(liquidGLMock).toHaveBeenCalledTimes(1)
+      })
+
+      // Starting deep in the transcript (bottom-follow): the first observed
+      // scroll anchors there with no offset.
+      const scroller = mountScroller(50000)
+      const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+      dispatchScroll(scroller)
+      expect(wallpaper.style.transform).toBe('translate3d(0, 0px, 0)')
+      const capturesAtAnchor = captures.count
+
+      setScrollTop(scroller, 49600)
+      dispatchScroll(scroller)
+      // Scrolling up moves the text down, so the wallpaper follows downward.
+      expect(wallpaper.style.transform).toBe('translate3d(0, 100px, 0)')
+
+      // Reaching the transcript top overshoots the headroom and clamps
+      // (jsdom innerHeight 768 → half headroom 768 × 120vh / 200 = 460.8px).
+      setScrollTop(scroller, 0)
+      dispatchScroll(scroller)
+      expect(wallpaper.style.transform).toBe('translate3d(0, 460.8px, 0)')
+      setScrollTop(scroller, 49600)
+      dispatchScroll(scroller)
+      expect(wallpaper.style.transform).toBe('translate3d(0, 100px, 0)')
+
+      // The lens tracks the translated wallpaper through its live snapshot
+      // rect, so scrolling must not trigger a re-rasterization at all.
+      expect(captures.count).toBe(capturesAtAnchor)
+    } finally {
+      dispose()
+    }
+  })
+
+  it('wraps the wallpaper in a viewport-sized clipping host so the enlarged canvas cannot scroll the document', () => {
+    const { controller } = bench()
+    const dispose = controller.start()
+    try {
+      const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+      const host = wallpaper.parentElement as HTMLElement
+      // The host is a direct body child carrying the clip class; the wallpaper
+      // keeps its inline overscan geometry inside it.
+      expect(host.className).toBe(css.wallpaperHost)
+      expect(host.parentElement).toBe(document.body)
+      expect(wallpaper.style.top).toBe('-60vh')
+      expect(wallpaper.style.height).toBe('calc(100% + 120vh)')
+      // Toggling off hides the wallpaper but keeps the host structure.
+      ;(document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement).click()
+      expect(document.querySelector(WALLPAPER_SELECTOR)).not.toBeNull()
+      expect(wallpaper.style.display).toBe('none')
+    } finally {
+      dispose()
+    }
+  })
+
+  it('boots with the default wallpaper preset and adopts a scope holding another', () => {
+    const first = bench()
+    const disposeFirst = first.controller.start()
+    try {
+      const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+      expect(wallpaper.className).toContain(css.ridge)
+    } finally {
+      disposeFirst()
+    }
+
+    const second = bench()
+    second.controller.attachSettings(scopeStub({ enabled: true, preset: 'collage', veil: 100, clarity: 0 }).scope)
+    const disposeSecond = second.controller.start()
+    try {
+      const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+      expect(wallpaper.className).toContain(css.collage)
+    } finally {
+      disposeSecond()
+    }
+  })
+
+  it('long-press cycles the preset, persists it, recaptures, and swallows the trailing click', async () => {
+    vi.useFakeTimers()
+    try {
+      const captures = installRenderer()
+      const { controller } = bench()
+      const dispose = controller.start()
+      try {
+        mountCard()
+        await vi.advanceTimersByTimeAsync(0)
+        const dock = document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement
+        const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+        expect(wallpaper.className).toContain(css.ridge)
+        const capturesBeforeCycle = captures.count
+
+        // Holding past the threshold cycles the preset: repaint + one
+        // recapture (the texture holds the old paint), no theme toggle.
+        dock.dispatchEvent(new Event('pointerdown'))
+        await vi.advanceTimersByTime(450)
+        expect(wallpaper.className).toContain(css.collage)
+        expect(captures.count).toBe(capturesBeforeCycle + 1)
+        expect(dock.getAttribute('aria-pressed')).toBe('true')
+
+        // The click that always follows a long press is swallowed.
+        dock.click()
+        expect(dock.getAttribute('aria-pressed')).toBe('true')
+
+        // A quick press releases before the threshold: the click toggles.
+        dock.dispatchEvent(new Event('pointerdown'))
+        dock.dispatchEvent(new Event('pointerup'))
+        dock.click()
+        expect(dock.getAttribute('aria-pressed')).toBe('false')
+        expect(wallpaper.className).toContain(css.collage)
+        // The long-press cycle and the trailing toggle both published.
+        expect(controller.snapshot.getSnapshot()).toEqual({ enabled: false, preset: 'collage', custom: false, veil: 100, clarity: 0 })
+      } finally {
+        dispose()
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('setEnabled and setPreset drive the surfaces, queue scope writes, and publish to the snapshot', async () => {
+    const captures = installRenderer()
+    const { controller } = bench()
+    const settings = scopeStub({ enabled: true, preset: 'ridge', veil: 100, clarity: 0 })
+    controller.attachSettings(settings.scope)
+    const dispose = controller.start()
+    try {
+      mountCard()
+      await vi.waitFor(() => {
+        expect(liquidGLMock).toHaveBeenCalledTimes(1)
+      })
+      const scroller = mountScroller(1000)
+      setScrollTop(scroller, 1400)
+      dispatchScroll(scroller)
+
+      // No-op when the state already holds the value: no write, same snapshot.
+      const layersBefore = controller.snapshot.getSnapshot()
+      controller.setEnabled(true)
+      expect(controller.snapshot.getSnapshot()).toBe(layersBefore)
+      expect(settings.writes).toEqual([])
+
+      controller.setEnabled(false)
+      expect(settings.writes).toEqual([['enabled', false]])
+      expect(controller.snapshot.getSnapshot().enabled).toBe(false)
+
+      controller.setEnabled(true)
+      expect(settings.writes).toEqual([['enabled', false], ['enabled', true]])
+      expect(controller.snapshot.getSnapshot()).toEqual({ enabled: true, preset: 'ridge', custom: false, veil: 100, clarity: 0 })
+
+      controller.setPreset('collage')
+      expect(settings.writes).toEqual([['enabled', false], ['enabled', true], ['preset', 'collage']])
+      expect(controller.snapshot.getSnapshot().preset).toBe('collage')
+      expect((document.querySelector(WALLPAPER_SELECTOR) as HTMLElement).className).toContain(css.collage)
+      // Content changed: the one legitimate recapture.
+      expect(captures.count).toBeGreaterThan(0)
+    } finally {
+      dispose()
+    }
+  })
+
+  it('setVeil scales the veil variable immediately and commits one debounced scope write per gesture', async () => {
+    vi.useFakeTimers()
+    try {
+      const { controller } = bench()
+      const settings = scopeStub({ enabled: true, preset: 'custom', veil: 100, clarity: 0 })
+      controller.attachSettings(settings.scope)
+      const dispose = controller.start()
+      try {
+        const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+        expect(wallpaper.style.getPropertyValue(VEIL_VAR)).toBe('1')
+
+        controller.setVeil(45)
+        expect(wallpaper.style.getPropertyValue(VEIL_VAR)).toBe('0.45')
+        expect(controller.snapshot.getSnapshot().veil).toBe(45)
+        // The write trails the gesture: nothing on the wire while dragging.
+        expect(settings.writes).toEqual([])
+        await vi.advanceTimersByTime(250)
+        expect(settings.writes).toEqual([['veil', 45]])
+
+        // Rapid ticks collapse into one trailing write with the last value.
+        controller.setVeil(30)
+        controller.setVeil(20)
+        await vi.advanceTimersByTime(250)
+        expect(settings.writes).toEqual([['veil', 45], ['veil', 20]])
+        expect(wallpaper.style.getPropertyValue(VEIL_VAR)).toBe('0.2')
+
+        // No-op when the state already holds the value: no further write.
+        controller.setVeil(20)
+        await vi.advanceTimersByTime(250)
+        expect(settings.writes).toEqual([['veil', 45], ['veil', 20]])
+      } finally {
+        dispose()
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('an adopted section carries its veil onto the wallpaper', () => {
+    const { controller } = bench()
+    controller.attachSettings(scopeStub({ enabled: true, preset: 'collage', veil: 45, clarity: 0 }).scope)
+    const dispose = controller.start()
+    try {
+      const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+      expect(wallpaper.style.getPropertyValue(VEIL_VAR)).toBe('0.45')
+      expect(controller.snapshot.getSnapshot().veil).toBe(45)
+    } finally {
+      dispose()
+    }
+  })
+
+  it('setClarity re-registers the token layer scaled, and commits one debounced scope write per gesture', async () => {
+    vi.useFakeTimers()
+    try {
+      const { controller, overrideTokens, disposeLayer } = bench()
+      const settings = scopeStub({ enabled: true, preset: 'ridge', veil: 100, clarity: 0 })
+      controller.attachSettings(settings.scope)
+      const dispose = controller.start()
+      try {
+        // Clarity 0 ships the stock table (the same reference, not a copy).
+        expect(overrideTokens).toHaveBeenCalledWith(PACKAGE_ID, LIQUID_GLASS_TOKENS)
+
+        controller.setClarity(50)
+        expect(overrideTokens).toHaveBeenCalledTimes(2)
+        expect(disposeLayer).toHaveBeenCalledTimes(1)
+        const scaled = overrideTokens.mock.calls[1]?.[1]
+        expect(scaled?.['--dsw-alias-bg-base']?.light).toBe('rgba(255, 255, 255, 0.16)')
+        expect(controller.snapshot.getSnapshot().clarity).toBe(50)
+        expect(settings.writes).toEqual([])
+        await vi.advanceTimersByTime(250)
+        expect(settings.writes).toEqual([['clarity', 50]])
+
+        // Rapid ticks collapse into one trailing write with the last value.
+        controller.setClarity(80)
+        controller.setClarity(100)
+        await vi.advanceTimersByTime(250)
+        expect(settings.writes).toEqual([['clarity', 50], ['clarity', 100]])
+        const clear = overrideTokens.mock.calls[3]?.[1]
+        expect(clear?.['--dsw-alias-bg-base']?.light).toBe('rgba(255, 255, 255, 0)')
+        expect(scaled?.['--dsw-alias-border-l2']).toEqual(LIQUID_GLASS_TOKENS['--dsw-alias-border-l2'])
+
+        // No-op when the state already holds the value.
+        controller.setClarity(100)
+        await vi.advanceTimersByTime(250)
+        expect(settings.writes).toEqual([['clarity', 50], ['clarity', 100]])
+      } finally {
+        dispose()
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('an adopted clarity re-registers the layer scaled', () => {
+    const { controller, overrideTokens } = bench()
+    controller.attachSettings(scopeStub({ enabled: true, preset: 'collage', veil: 100, clarity: 100 }).scope)
+    const dispose = controller.start()
+    try {
+      expect(overrideTokens).toHaveBeenCalledTimes(1)
+      const scaled = overrideTokens.mock.calls[0]?.[1]
+      expect(scaled?.['--dsw-alias-bg-base']?.light).toBe('rgba(255, 255, 255, 0)')
+      expect(controller.snapshot.getSnapshot().clarity).toBe(100)
+    } finally {
+      dispose()
+    }
+  })
+
+  it('ignores scroll events from anything but the conversation scrollport itself', () => {
+    const { controller } = bench()
+    const dispose = controller.start()
+    try {
+      const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+      // window target: not an Element
+      dispatchScroll(window)
+      // an Element without the conversation marker (sidebar lists share this
+      // document-level listener)
+      const sidebar = document.createElement('div')
+      document.body.append(sidebar)
+      dispatchScroll(sidebar)
+      // a nested scroller inside the conversation (code blocks): exact match,
+      // not closest(), so it must not drag the wallpaper either
+      const scroller = mountScroller(1000)
+      const inner = document.createElement('div')
+      scroller.append(inner)
+      dispatchScroll(inner)
+      expect(wallpaper.style.transform).toBe('')
+    } finally {
+      dispose()
+    }
+  })
+
+  it('re-anchors when the scrollport element changes', () => {
+    const { controller } = bench()
+    const dispose = controller.start()
+    try {
+      const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+      const first = mountScroller(1000)
+      dispatchScroll(first)
+      expect(wallpaper.style.transform).toBe('translate3d(0, 0px, 0)')
+      setScrollTop(first, 1200)
+      dispatchScroll(first)
+      expect(wallpaper.style.transform).toBe('translate3d(0, -50px, 0)')
+
+      // A workspace switch replaces the element; the fresh port anchors at
+      // its own position instead of inheriting the old offset.
+      const second = mountScroller(4000)
+      dispatchScroll(second)
+      expect(wallpaper.style.transform).toBe('translate3d(0, 0px, 0)')
+
+      // Scrolling down far past the headroom clamps on the negative side.
+      setScrollTop(second, 100000)
+      dispatchScroll(second)
+      expect(wallpaper.style.transform).toBe('translate3d(0, -460.8px, 0)')
+    } finally {
+      dispose()
+    }
+  })
+
+  it('toggling off removes the translation and re-enabling starts from the neutral position', () => {
+    const { controller } = bench()
+    const dispose = controller.start()
+    try {
+      mountCard()
+      const scroller = mountScroller(1000)
+      const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+      setScrollTop(scroller, 1400)
+      dispatchScroll(scroller)
+      expect(wallpaper.style.transform).not.toBe('')
+
+      ;(document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement).click()
+      expect(wallpaper.style.transform).toBe('')
+
+      // Re-enabling starts from the neutral position, not the stale offset.
+      ;(document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement).click()
+      expect(wallpaper.style.transform).toBe('')
+    } finally {
+      dispose()
+    }
+  })
+
+  it('teardown detaches the scroll listener so later scrolls do nothing', () => {
+    const { controller } = bench()
+    const dispose = controller.start()
+    try {
+      mountCard()
+      const scroller = mountScroller(1000)
+      const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+      setScrollTop(scroller, 1400)
+      dispatchScroll(scroller)
+      expect(wallpaper.style.transform).not.toBe('')
+
+      dispose()
+      setScrollTop(scroller, 2000)
+      dispatchScroll(scroller)
+      expect(wallpaper.style.transform).toBe('')
+    } finally {
+      dispose()
+    }
+  })
+})

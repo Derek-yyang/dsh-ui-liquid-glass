@@ -1,0 +1,19 @@
+{
+  // Vitest-only resolution facade. Client packages' published artifacts are
+  // closure bundles for the dsh web module loader — vitest cannot import them.
+  // Tests therefore resolve @deepseek-ai/* to the SOURCE plane of a
+  // deepseek-harness checkout cloned as a sibling of this repository, exactly
+  // like in-repo development. Typecheck and builds do NOT use this file; they
+  // resolve the published npm types.
+  "compilerOptions": {
+    "paths": {
+      "@deepseek-ai/cordis": ["../deepseek-harness/vendor/cordis/src"],
+      "@deepseek-ai/cosmokit": ["../deepseek-harness/vendor/cosmokit/src"],
+      "@deepseek-ai/dsh-client-*": ["../deepseek-harness/packages/client/*/src"],
+      "@deepseek-ai/dsh-client-*/client": ["../deepseek-harness/packages/client/*/src/client"],
+      "@deepseek-ai/dsh-client-test-runtime": ["../deepseek-harness/packages/test-support/client-runtime/src"],
+      "@deepseek-ai/dsh-invariants": ["../deepseek-harness/packages/runtime-diagnostics/invariants/src/index.ts"],
+      "@deepseek-ai/dsh-settings": ["../deepseek-harness/packages/settings/settings/src"]
+    }
+  }
+}
