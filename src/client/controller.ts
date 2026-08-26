@@ -20,7 +20,7 @@ import {
 import { scaleSurfaceTokens } from '../tokens.ts'
 import type { WallpaperPreset } from '../tokens.ts'
 import {
-  DEFAULT_LOOK, GLASS_LOOK_PRESETS, GLASS_LOOK_SLIDER_KEYS, GLASS_LOOK_SLIDERS, lookIdFor, sameLook,
+  DEFAULT_LOOK, GLASS_LOOKS, GLASS_LOOK_PRESETS, GLASS_LOOK_SLIDER_KEYS, GLASS_LOOK_SLIDERS, lookIdFor, sameLook,
 } from '../look.ts'
 import type { GlassLookId, GlassLookValues, LiquidGlassHostSection, NamedGlassLook } from '../look.ts'
 
@@ -44,6 +44,12 @@ const KNOB_LABEL_ZH: Record<(typeof GLASS_LOOK_SLIDER_KEYS)[number], string> = {
   frost: '磨砂',
   aberration: '色散',
   magnify: '放大',
+}
+
+const LOOK_LABEL_ZH: Record<(typeof GLASS_LOOKS)[number], string> = {
+  restrained: '克制',
+  standard: '标准',
+  rich: '浓郁',
 }
 
 /** Format a look-knob number for the popover readout. */
@@ -897,8 +903,13 @@ export class LiquidGlassController {
       const readout = input?.parentElement?.querySelector(`.${css.settingsSliderValue}`)
       if (readout instanceof HTMLElement) readout.textContent = formatKnob(this.#look[key])
     }
-    this.#syncTuningToggle(panel, '投影', 'shadow')
-    this.#syncTuningToggle(panel, '高光', 'specular')
+    const look = lookIdFor(this.#look)
+    for (const id of GLASS_LOOKS) {
+      const button = panel.querySelector(`button[data-look="${id}"]`)
+      if (button instanceof HTMLButtonElement) button.setAttribute('aria-pressed', String(look === id))
+    }
+    this.#syncTuningSwitch(panel, '投影', 'shadow')
+    this.#syncTuningSwitch(panel, '高光', 'specular')
   }
 
   /** Build the popover controls once. */
@@ -907,6 +918,20 @@ export class LiquidGlassController {
     title.className = css.tuningTitle
     title.textContent = '微调玻璃'
     panel.append(title)
+    const looks = document.createElement('div')
+    looks.className = css.tuningLooks
+    const current = lookIdFor(this.#look)
+    for (const id of GLASS_LOOKS) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = css.tuningLook
+      button.dataset.look = id
+      button.textContent = LOOK_LABEL_ZH[id]
+      button.setAttribute('aria-pressed', String(current === id))
+      button.addEventListener('click', () => { this.setLook(id) })
+      looks.append(button)
+    }
+    panel.append(looks)
     for (const key of GLASS_LOOK_SLIDER_KEYS) {
       const spec = GLASS_LOOK_SLIDERS[key]
       const row = document.createElement('div')
@@ -931,40 +956,36 @@ export class LiquidGlassController {
       row.append(label, input, readout)
       panel.append(row)
     }
-    panel.append(this.#tuningToggle('投影', 'shadow'), this.#tuningToggle('高光', 'specular'))
+    const switches = document.createElement('div')
+    switches.className = css.tuningSwitches
+    switches.append(this.#tuningSwitch('投影', 'shadow'), this.#tuningSwitch('高光', 'specular'))
+    panel.append(switches)
   }
 
-  /** Refresh one on/off row without replacing the button. */
-  #syncTuningToggle(panel: HTMLDivElement, labelText: string, key: 'shadow' | 'specular'): void {
-    for (const row of panel.querySelectorAll(`.${css.tuningRow}`)) {
-      const label = row.querySelector(`.${css.tuningLabel}`)
-      if (label?.textContent !== labelText) continue
-      const button = row.querySelector('button')
-      if (button === null) continue
+  /** Refresh one compact switch without replacing the button. */
+  #syncTuningSwitch(panel: HTMLDivElement, labelText: string, key: 'shadow' | 'specular'): void {
+    for (const button of panel.querySelectorAll(`.${css.tuningSwitch}`)) {
+      if (!(button instanceof HTMLButtonElement)) continue
+      if (button.dataset.switch !== key) continue
       const on = this.#look[key]
       button.setAttribute('aria-pressed', String(on))
-      button.textContent = on ? '开' : '关'
+      button.textContent = `${labelText} ${on ? '开' : '关'}`
     }
   }
 
-  /** One on/off row in the tuning popover. */
-  #tuningToggle(labelText: string, key: 'shadow' | 'specular'): HTMLDivElement {
-    const row = document.createElement('div')
-    row.className = css.tuningRow
-    const label = document.createElement('span')
-    label.className = css.tuningLabel
-    label.textContent = labelText
+  /** Compact on/off chip in the tuning popover. */
+  #tuningSwitch(labelText: string, key: 'shadow' | 'specular'): HTMLButtonElement {
     const button = document.createElement('button')
     button.type = 'button'
-    button.className = css.settingsToggle
+    button.className = css.tuningSwitch
+    button.dataset.switch = key
     const on = this.#look[key]
     button.setAttribute('aria-pressed', String(on))
-    button.textContent = on ? '开' : '关'
+    button.textContent = `${labelText} ${on ? '开' : '关'}`
     button.addEventListener('click', () => {
       this.setLookValues({ ...this.#look, [key]: !this.#look[key] })
     })
-    row.append(label, button)
-    return row
+    return button
   }
 
   #teardown(): void {

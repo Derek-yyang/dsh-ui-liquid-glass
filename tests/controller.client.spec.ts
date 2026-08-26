@@ -859,6 +859,12 @@ describe('LiquidGlassController', () => {
       expect(lens.options.refraction).toBe(0.09)
       // A drag must not rebuild the input (that would abort the gesture).
       expect(panel.querySelector('input[aria-label="折射"]')).toBe(slider)
+      const restrained = panel.querySelector('button[data-look="restrained"]') as HTMLButtonElement
+      expect(restrained).not.toBeNull()
+      restrained.click()
+      expect(controller.snapshot.getSnapshot().look).toBe('restrained')
+      expect(lens.options.refraction).toBe(GLASS_LOOK_PRESETS.restrained.refraction)
+      expect(restrained.getAttribute('aria-pressed')).toBe('true')
       slider.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
       expect(document.querySelector(TUNING_PANEL_SELECTOR)).not.toBeNull()
       dock.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))

@@ -31,6 +31,10 @@ declare module '*/glass.module.css' {
     readonly tuningTitle: string
     readonly tuningRow: string
     readonly tuningLabel: string
+    readonly tuningLooks: string
+    readonly tuningLook: string
+    readonly tuningSwitches: string
+    readonly tuningSwitch: string
   }
   const classes: GlassModuleClasses
   export default classes

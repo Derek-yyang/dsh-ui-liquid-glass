@@ -331,7 +331,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  width: 260px;
+  width: 280px;
   padding: 12px 14px;
   border-radius: 12px;
   color: rgb(232, 234, 240);
@@ -355,19 +355,21 @@
 .tuningRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .tuningLabel {
   flex: none;
-  width: 72px;
+  width: 52px;
   font-size: 12px;
   opacity: 0.85;
 }
 
 .tuning .settingsSlider {
-  width: 110px;
+  flex: 1;
+  min-width: 0;
+  width: auto;
 }
 
 .tuning .settingsSliderValue {
@@ -376,7 +378,47 @@
   opacity: 0.7;
 }
 
-.tuning .settingsToggle {
-  padding: 3px 8px;
+.tuningLooks {
+  display: flex;
+  gap: 4px;
+}
+
+.tuningLook {
+  flex: 1;
+  padding: 4px 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
   font-size: 12px;
+  cursor: pointer;
+}
+
+.tuningLook[aria-pressed='true'] {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.tuningSwitches {
+  display: flex;
+  gap: 8px;
+}
+
+.tuningSwitch {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tuningSwitch[aria-pressed='true'] {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.12);
 }
