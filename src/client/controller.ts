@@ -14,8 +14,8 @@ import { loadCustomWallpaper, saveCustomWallpaper } from './wallpaper-store.ts'
 import {
   CLARITY_DEFAULT_PERCENT, COMPOSER_SELECTOR, GLASS_MARKER, LIQUID_GLASS_TOKENS,
   MODAL_PANEL_SELECTOR, PACKAGE_ID, SCROLL_SELECTOR, SEAT_SELECTOR,
-  SIDEBAR_SELECTOR, VEIL_DEFAULT_PERCENT, VEIL_VAR, WALLPAPER_PRESETS,
-  WALLPAPER_SELECTOR,
+  SIDEBAR_SELECTOR, VEIL_DEFAULT_PERCENT, VEIL_VAR, WALLPAPER_CROSSFADE_MS,
+  WALLPAPER_PRESETS, WALLPAPER_SELECTOR,
 } from '../tokens.ts'
 import { scaleSurfaceTokens } from '../tokens.ts'
 import type { WallpaperPreset } from '../tokens.ts'
@@ -152,6 +152,9 @@ export class LiquidGlassController {
   #dock: HTMLButtonElement | undefined
   #wallpaperHost: HTMLDivElement | undefined
   #wallpaper: HTMLDivElement | undefined
+  /** Outgoing wallpaper clone fading out over a preset swap; removed when the
+   * crossfade settles or is aborted. */
+  #outgoing: HTMLDivElement | undefined
   #overlayRules: HTMLStyleElement | undefined
   #card: HTMLElement | undefined
   #savedCardStyle: string | null | undefined
@@ -165,6 +168,10 @@ export class LiquidGlassController {
   #longPressed = false
   #veilWriteTimer: ReturnType<typeof setTimeout> | undefined
   #clarityWriteTimer: ReturnType<typeof setTimeout> | undefined
+  #crossfadeTimer: ReturnType<typeof setTimeout> | undefined
+  /** Object URL waiting to be revoked until the outgoing clone that still
+   * paints it has been removed. */
+  #pendingRevoke: string | undefined
   #removed = false
 
   constructor(theme: ThemeRuntime) {
@@ -189,7 +196,7 @@ export class LiquidGlassController {
       clarity: this.#clarity,
     })
     if (this.#preset === 'custom' && this.#wallpaper !== undefined) {
-      this.#applyWallpaperPreset(this.#wallpaper)
+      this.#crossfadeWallpaper()
     }
   }
 
@@ -204,7 +211,12 @@ export class LiquidGlassController {
     const previous = this.#customUrl
     this.#customUrl = URL.createObjectURL(blob)
     this.setPreset('custom')
-    if (previous !== undefined) URL.revokeObjectURL(previous)
+    // The outgoing clone still paints the previous URL through the crossfade;
+    // hold the revoke until that clone is gone (immediate if the fade skipped).
+    if (previous !== undefined) {
+      if (this.#outgoing !== undefined) this.#pendingRevoke = previous
+      else URL.revokeObjectURL(previous)
+    }
   }
 
   /**
@@ -235,8 +247,7 @@ export class LiquidGlassController {
     if (enabled !== this.#enabled) this.#apply(enabled)
     if (preset !== this.#preset) {
       this.#preset = preset
-      if (this.#wallpaper !== undefined) this.#applyWallpaperPreset(this.#wallpaper)
-      if (this.#enabled) rendererHandle()?.captureSnapshot()
+      if (this.#wallpaper !== undefined) this.#crossfadeWallpaper()
     }
     if (veil !== this.#veil) {
       this.#veil = veil
@@ -394,6 +405,7 @@ export class LiquidGlassController {
       // exact element (and observed by its ResizeObserver) — removing it
       // would leave the next enable sampling a blank capture of a detached
       // node with nothing to trigger a fresh one.
+      this.#abortCrossfade()
       if (this.#wallpaper !== undefined) this.#wallpaper.style.display = 'none'
       this.#overlayRules?.remove()
       this.#overlayRules = undefined
@@ -421,6 +433,68 @@ export class LiquidGlassController {
     this.#wallpaper = wallpaper
   }
 
+  /** Swap the live wallpaper onto the new preset. When a previous layer is
+   * already on screen and motion is allowed, clone it as an outgoing overlay
+   * that fades out over `WALLPAPER_CROSSFADE_MS` and recapture the refraction
+   * snapshot only after that clone is gone — so the lens and the wallpaper
+   * settle together. Rapid swaps abort the in-flight fade (the previous
+   * outgoing clone is dropped immediately) so only one extra layer exists.
+   * First paint, reduced-motion, and the theme-off path skip the fade. */
+  #crossfadeWallpaper(): void {
+    const wallpaper = this.#wallpaper
+    /* v8 ignore next -- callers only invoke while a live wallpaper exists. */
+    if (wallpaper === undefined) return
+    const reduceMotion = typeof matchMedia === 'function'
+      && matchMedia('(prefers-reduced-motion: reduce)').matches
+    const host = this.#wallpaperHost
+    const fade = this.#enabled && host !== undefined && !reduceMotion
+      && wallpaper.style.display !== 'none'
+    if (fade) {
+      this.#abortCrossfade()
+      const outgoing = wallpaper.cloneNode(true) as HTMLDivElement
+      outgoing.removeAttribute('data-dsh-liquid-glass-wallpaper')
+      outgoing.classList.add(css.outgoing)
+      host.append(outgoing)
+      this.#outgoing = outgoing
+      // Double rAF: the clone has to paint at opacity 1 before the fade class
+      // applies, otherwise the first interpolated frame is already 0.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (this.#outgoing !== outgoing) return
+          outgoing.classList.add(css.outgoingFade)
+        })
+      })
+      this.#crossfadeTimer = setTimeout(() => { this.#settleCrossfade() }, WALLPAPER_CROSSFADE_MS)
+    }
+    this.#applyWallpaperPreset(wallpaper)
+    if (!fade && this.#enabled) rendererHandle()?.captureSnapshot()
+  }
+
+  /** Drop an in-flight outgoing clone without waiting for its timer. */
+  #abortCrossfade(): void {
+    clearTimeout(this.#crossfadeTimer)
+    this.#crossfadeTimer = undefined
+    this.#outgoing?.remove()
+    this.#outgoing = undefined
+    this.#flushPendingRevoke()
+  }
+
+  /** Finish a settled fade: drop the clone and recapture the now-visible scene. */
+  #settleCrossfade(): void {
+    this.#crossfadeTimer = undefined
+    this.#outgoing?.remove()
+    this.#outgoing = undefined
+    this.#flushPendingRevoke()
+    if (this.#enabled) rendererHandle()?.captureSnapshot()
+  }
+
+  /** Revoke an object URL that was held for an outgoing clone. */
+  #flushPendingRevoke(): void {
+    if (this.#pendingRevoke === undefined) return
+    URL.revokeObjectURL(this.#pendingRevoke)
+    this.#pendingRevoke = undefined
+  }
+
   #applyWallpaperPreset(wallpaper: HTMLElement): void {
     // A custom preset without a loaded image (first boot before IndexedDB
     // answers, or another device) falls back to the default scene.
@@ -441,7 +515,7 @@ export class LiquidGlassController {
   }
 
   /** Advance to the next preset — the dock's write path with wrap around;
-   * repaint, recapture, and publish happen in `setPreset`. Cycling walks the
+   * the crossfade, recapture, and publish happen in `setPreset`. Cycling walks the
    * built-in presets only: landing on `custom` without an uploaded image
    * would fall straight back. */
   #cycleWallpaper(): void {
@@ -477,6 +551,7 @@ export class LiquidGlassController {
     this.#scrollPort = undefined
     this.#parallaxAnchor = undefined
     this.#wallpaper?.style.removeProperty('transform')
+    this.#outgoing?.style.removeProperty('transform')
   }
 
   /** Translate the wallpaper against the conversation scroll at
@@ -506,7 +581,9 @@ export class LiquidGlassController {
     this.#parallaxAnchor ??= port.scrollTop
     const half = (window.innerHeight * PARALLAX_HEADROOM_VH) / 200
     const shift = Math.max(-half, Math.min(half, (this.#parallaxAnchor - port.scrollTop) * PARALLAX_COEFFICIENT))
-    wallpaper.style.transform = `translate3d(0, ${shift}px, 0)`
+    const transform = `translate3d(0, ${shift}px, 0)`
+    wallpaper.style.transform = transform
+    if (this.#outgoing !== undefined) this.#outgoing.style.transform = transform
   }
 
   /** Lift the composer seat above the library's body-level lens canvas in the
@@ -650,6 +727,7 @@ export class LiquidGlassController {
     clearTimeout(this.#pressTimer)
     clearTimeout(this.#veilWriteTimer)
     clearTimeout(this.#clarityWriteTimer)
+    this.#abortCrossfade()
     this.#teardownScrollSync()
     this.#suspendRenderer()
     this.#disposeLayer?.()

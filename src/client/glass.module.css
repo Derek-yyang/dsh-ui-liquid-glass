@@ -42,6 +42,26 @@
   will-change: transform;
 }
 
+/* Outgoing clone during a preset swap: stacked on top of the live wallpaper
+ * (which already paints the new scene) and faded to 0. `pointer-events` stay
+ * none so the clone never intercepts the dock. The fade class is applied on
+ * the next frame so the first interpolated value is 1, not 0. */
+.outgoing {
+  z-index: 1;
+  opacity: 1;
+}
+
+.outgoingFade {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .outgoingFade {
+    transition: none;
+  }
+}
+
 /* Preset "ridge" (default): a high-contrast line-art scene — one mountain
  * silhouette plus a ring/stars field — because refraction reads through bent
  * edges, which the smooth gradients never provided. Structure sits in the

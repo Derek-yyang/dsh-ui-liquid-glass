@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   BG_BASE_DARK, BG_BASE_LIGHT, LIQUID_GLASS_TOKENS, PACKAGE_ID,
-  scaleSurfaceTokens,
+  WALLPAPER_CROSSFADE_MS, scaleSurfaceTokens,
 } from '../src/tokens.ts'
 
 describe('LIQUID_GLASS_TOKENS', () => {
@@ -59,6 +59,7 @@ describe('LIQUID_GLASS_TOKENS', () => {
   it('exposes the bg-base marker values the layer presence check relies on', () => {
     expect(LIQUID_GLASS_TOKENS['--dsw-alias-bg-base']).toEqual({ light: BG_BASE_LIGHT, dark: BG_BASE_DARK })
     expect(PACKAGE_ID).toBe('dsh-ui-liquid-glass')
+    expect(WALLPAPER_CROSSFADE_MS).toBe(150)
   })
 
   describe('scaleSurfaceTokens', () => {

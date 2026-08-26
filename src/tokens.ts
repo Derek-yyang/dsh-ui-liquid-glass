@@ -71,6 +71,13 @@ export const VEIL_DEFAULT_PERCENT = 100
  * Host schema fall back to it. */
 export const CLARITY_DEFAULT_PERCENT = 0
 
+/** Wallpaper preset-swap crossfade. The live layer paints the new scene
+ * underneath immediately; the outgoing clone fades out over this window, and
+ * the refraction snapshot recaptures only once the outgoing layer is gone so
+ * the lens and the wallpaper settle together. `prefers-reduced-motion: reduce`
+ * skips the fade and recaptures in the same turn. */
+export const WALLPAPER_CROSSFADE_MS = 150
+
 /** The light-mode value of `--dsw-alias-bg-base` — the layer's presence marker. */
 export const BG_BASE_LIGHT = 'rgba(255, 255, 255, 0.32)'
 

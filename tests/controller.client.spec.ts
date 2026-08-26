@@ -407,11 +407,19 @@ describe('LiquidGlassController', () => {
         expect(wallpaper.className).toContain(css.ridge)
         const capturesBeforeCycle = captures.count
 
-        // Holding past the threshold cycles the preset: repaint + one
-        // recapture (the texture holds the old paint), no theme toggle.
+        // Holding past the threshold cycles the preset: the live layer
+        // paints the new scene, an outgoing clone fades, and the snapshot
+        // recaptures only after the 150ms crossfade settles. No theme toggle.
         dock.dispatchEvent(new Event('pointerdown'))
         await vi.advanceTimersByTime(450)
         expect(wallpaper.className).toContain(css.collage)
+        expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(1)
+        expect(captures.count).toBe(capturesBeforeCycle)
+        // Two rAF ticks start the fade class; the 150ms timer then settles.
+        await vi.advanceTimersByTime(16)
+        await vi.advanceTimersByTime(16)
+        await vi.advanceTimersByTime(150)
+        expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(0)
         expect(captures.count).toBe(capturesBeforeCycle + 1)
         expect(dock.getAttribute('aria-pressed')).toBe('true')
 
@@ -436,42 +444,104 @@ describe('LiquidGlassController', () => {
   })
 
   it('setEnabled and setPreset drive the surfaces, queue scope writes, and publish to the snapshot', async () => {
-    const captures = installRenderer()
-    const { controller } = bench()
-    const settings = scopeStub({ enabled: true, preset: 'ridge', veil: 100, clarity: 0 })
-    controller.attachSettings(settings.scope)
-    const dispose = controller.start()
+    vi.useFakeTimers()
     try {
-      mountCard()
-      await vi.waitFor(() => {
-        expect(liquidGLMock).toHaveBeenCalledTimes(1)
-      })
-      const scroller = mountScroller(1000)
-      setScrollTop(scroller, 1400)
-      dispatchScroll(scroller)
+      const captures = installRenderer()
+      const { controller } = bench()
+      const settings = scopeStub({ enabled: true, preset: 'ridge', veil: 100, clarity: 0 })
+      controller.attachSettings(settings.scope)
+      const dispose = controller.start()
+      try {
+        mountCard()
+        await vi.advanceTimersByTimeAsync(0)
+        const scroller = mountScroller(1000)
+        setScrollTop(scroller, 1400)
+        dispatchScroll(scroller)
 
-      // No-op when the state already holds the value: no write, same snapshot.
-      const layersBefore = controller.snapshot.getSnapshot()
-      controller.setEnabled(true)
-      expect(controller.snapshot.getSnapshot()).toBe(layersBefore)
-      expect(settings.writes).toEqual([])
+        // No-op when the state already holds the value: no write, same snapshot.
+        const layersBefore = controller.snapshot.getSnapshot()
+        controller.setEnabled(true)
+        expect(controller.snapshot.getSnapshot()).toBe(layersBefore)
+        expect(settings.writes).toEqual([])
 
-      controller.setEnabled(false)
-      expect(settings.writes).toEqual([['enabled', false]])
-      expect(controller.snapshot.getSnapshot().enabled).toBe(false)
+        controller.setEnabled(false)
+        expect(settings.writes).toEqual([['enabled', false]])
+        expect(controller.snapshot.getSnapshot().enabled).toBe(false)
 
-      controller.setEnabled(true)
-      expect(settings.writes).toEqual([['enabled', false], ['enabled', true]])
-      expect(controller.snapshot.getSnapshot()).toEqual({ enabled: true, preset: 'ridge', custom: false, veil: 100, clarity: 0 })
+        controller.setEnabled(true)
+        expect(settings.writes).toEqual([['enabled', false], ['enabled', true]])
+        expect(controller.snapshot.getSnapshot()).toEqual({ enabled: true, preset: 'ridge', custom: false, veil: 100, clarity: 0 })
 
-      controller.setPreset('collage')
-      expect(settings.writes).toEqual([['enabled', false], ['enabled', true], ['preset', 'collage']])
-      expect(controller.snapshot.getSnapshot().preset).toBe('collage')
-      expect((document.querySelector(WALLPAPER_SELECTOR) as HTMLElement).className).toContain(css.collage)
-      // Content changed: the one legitimate recapture.
-      expect(captures.count).toBeGreaterThan(0)
+        controller.setPreset('collage')
+        expect(settings.writes).toEqual([['enabled', false], ['enabled', true], ['preset', 'collage']])
+        expect(controller.snapshot.getSnapshot().preset).toBe('collage')
+        expect((document.querySelector(WALLPAPER_SELECTOR) as HTMLElement).className).toContain(css.collage)
+        // Live layer already paints collage; the snapshot recaptures after the
+        // 150ms outgoing fade, not on the same turn as the class swap.
+        const capturesAtSwap = captures.count
+        expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(1)
+        await vi.advanceTimersByTime(16)
+        await vi.advanceTimersByTime(16)
+        await vi.advanceTimersByTime(150)
+        expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(0)
+        expect(captures.count).toBeGreaterThan(capturesAtSwap)
+      } finally {
+        dispose()
+      }
     } finally {
-      dispose()
+      vi.useRealTimers()
+    }
+  })
+
+  it('a second preset swap aborts the in-flight fade so only one outgoing clone exists', async () => {
+    vi.useFakeTimers()
+    try {
+      const captures = installRenderer()
+      const { controller } = bench()
+      const dispose = controller.start()
+      try {
+        const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
+        controller.setPreset('collage')
+        expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(1)
+        const firstOutgoing = document.querySelector(`.${css.outgoing}`)
+        const capturesMidFade = captures.count
+        controller.setPreset('ridge')
+        expect(wallpaper.className).toContain(css.ridge)
+        expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(1)
+        expect(document.querySelector(`.${css.outgoing}`)).not.toBe(firstOutgoing)
+        expect(captures.count).toBe(capturesMidFade)
+        await vi.advanceTimersByTime(16)
+        await vi.advanceTimersByTime(16)
+        await vi.advanceTimersByTime(150)
+        expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(0)
+        expect(captures.count).toBe(capturesMidFade + 1)
+      } finally {
+        dispose()
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('turning the theme off mid-fade drops the outgoing clone without recapturing', async () => {
+    vi.useFakeTimers()
+    try {
+      const captures = installRenderer()
+      const { controller } = bench()
+      const dispose = controller.start()
+      try {
+        controller.setPreset('collage')
+        expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(1)
+        const capturesMidFade = captures.count
+        controller.setEnabled(false)
+        expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(0)
+        await vi.advanceTimersByTime(200)
+        expect(captures.count).toBe(capturesMidFade)
+      } finally {
+        dispose()
+      }
+    } finally {
+      vi.useRealTimers()
     }
   })
 

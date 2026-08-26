@@ -5,6 +5,8 @@ declare module '*/glass.module.css' {
   interface GlassModuleClasses {
     readonly wallpaperHost: string
     readonly wallpaper: string
+    readonly outgoing: string
+    readonly outgoingFade: string
     readonly ridge: string
     readonly collage: string
     readonly custom: string
