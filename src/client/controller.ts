@@ -173,6 +173,10 @@ export class LiquidGlassController {
   #clarity = CLARITY_DEFAULT_PERCENT
   /** Live liquidGL look knobs. Defaults to the shipped `rich` calibration. */
   #look: GlassLookValues = { ...DEFAULT_LOOK_VALUES }
+  /** Echo suppression for `#persistLook`: Host `set` republishes after each
+   * field, so eight sequential writes would otherwise `#adopt` a half-applied
+   * bag and the popover sliders would jump through intermediate values. */
+  #lookWritePending = false
   /** Object URL of the uploaded custom image; undefined until one loads or is
    * uploaded on this device. */
   #customUrl: string | undefined
@@ -261,6 +265,7 @@ export class LiquidGlassController {
 
   /** Adopt an accepted Host section onto the surfaces. */
   #adopt(): void {
+    if (this.#lookWritePending) return
     const section = this.#scope?.getSnapshot()
     if (section === undefined || section.status !== 'ready' || section.value === undefined) return
     const value = section.value
@@ -426,7 +431,12 @@ export class LiquidGlassController {
   #persistLook(): void {
     const scope = this.#scope
     if (scope === undefined) return
-    for (const key of LOOK_KEYS) void scope.set(key, this.#look[key])
+    this.#lookWritePending = true
+    const writes = LOOK_KEYS.map(key => scope.set(key, this.#look[key]))
+    void Promise.all(writes).finally(() => {
+      this.#lookWritePending = false
+      this.#adopt()
+    })
   }
 
   /** Whether the theme is currently applied. */

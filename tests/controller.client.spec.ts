@@ -73,7 +73,9 @@ function scopeStub(section: LiquidGlassHostSection) {
     set: (field: string, next: unknown): Promise<void> => {
       writes.push([field, next])
       value = { ...value, [field]: next }
-      for (const listener of [...listeners]) listener()
+      queueMicrotask(() => {
+        for (const listener of [...listeners]) listener()
+      })
       return Promise.resolve()
     },
     unset: (): Promise<void> => Promise.resolve(),
@@ -838,6 +840,39 @@ describe('LiquidGlassController', () => {
         controller.onPaletteChange()
         await vi.advanceTimersByTime(32)
         expect(captures.count).toBe(offCount)
+      } finally {
+        dispose()
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('switching named looks does not paint intermediate slider values from Host echoes', async () => {
+    vi.useFakeTimers()
+    try {
+      const { controller } = bench()
+      const settings = scopeStub(hostSection({ enabled: true, preset: 'ridge' }))
+      controller.attachSettings(settings.scope)
+      const dispose = controller.start()
+      try {
+        const dock = document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement
+        dock.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+        const panel = document.querySelector(TUNING_PANEL_SELECTOR) as HTMLElement
+        const slider = panel.querySelector('input[aria-label="折射"]') as HTMLInputElement
+        const seen: string[] = []
+        const record = (): void => { seen.push(slider.value) }
+        record()
+        controller.setLook('restrained')
+        record()
+        await Promise.resolve()
+        record()
+        await vi.advanceTimersByTime(250)
+        await Promise.resolve()
+        record()
+        expect(seen.every(value => value === String(RICH.refraction) || value === String(GLASS_LOOK_PRESETS.restrained.refraction))).toBe(true)
+        expect(seen).toContain(String(GLASS_LOOK_PRESETS.restrained.refraction))
+        expect(slider.value).toBe(String(GLASS_LOOK_PRESETS.restrained.refraction))
       } finally {
         dispose()
       }
