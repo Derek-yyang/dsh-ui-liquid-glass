@@ -856,6 +856,10 @@ describe('LiquidGlassController', () => {
       slider.dispatchEvent(new Event('input'))
       expect(controller.snapshot.getSnapshot().look).toBe('custom')
       expect(lens.options.refraction).toBe(0.09)
+      // A drag must not rebuild the input (that would abort the gesture).
+      expect(panel.querySelector('input[aria-label="折射"]')).toBe(slider)
+      slider.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
+      expect(document.querySelector(TUNING_PANEL_SELECTOR)).not.toBeNull()
       dock.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
       expect(document.querySelector(TUNING_PANEL_SELECTOR)).toBeNull()
     } finally {

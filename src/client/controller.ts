@@ -865,24 +865,42 @@ export class LiquidGlassController {
       if (this.#dock?.contains(target) === true) return
       this.#closeTuningPanel()
     }
-    document.addEventListener('pointerdown', this.#outsidePointer)
+    // pointerup, not pointerdown: a range thumb's drag fires document
+    // pointerdown (and, on some browsers, retargets outside the input),
+    // which would close the panel mid-gesture.
+    document.addEventListener('pointerup', this.#outsidePointer)
   }
 
   /** Drop the popover and its outside-click listener. */
   #closeTuningPanel(): void {
     if (this.#outsidePointer !== undefined) {
-      document.removeEventListener('pointerdown', this.#outsidePointer)
+      document.removeEventListener('pointerup', this.#outsidePointer)
       this.#outsidePointer = undefined
     }
     this.#tuning?.remove()
     this.#tuning = undefined
   }
 
-  /** Rebuild the popover contents from the live look bag. */
+  /** Keep the popover in sync with the live look bag. First call builds the
+   * controls; later calls only write values so a drag is not torn down. */
   #syncTuningPanel(): void {
     const panel = this.#tuning
     if (panel === undefined) return
-    panel.replaceChildren()
+    if (panel.childElementCount === 0) this.#buildTuningPanel(panel)
+    for (const key of GLASS_LOOK_SLIDER_KEYS) {
+      const input = panel.querySelector(`input[aria-label="${KNOB_LABEL_ZH[key]}"]`)
+      if (input instanceof HTMLInputElement && input !== document.activeElement) {
+        input.value = String(this.#look[key])
+      }
+      const readout = input?.parentElement?.querySelector(`.${css.settingsSliderValue}`)
+      if (readout instanceof HTMLElement) readout.textContent = formatKnob(this.#look[key])
+    }
+    this.#syncTuningToggle(panel, '投影', 'shadow')
+    this.#syncTuningToggle(panel, '高光', 'specular')
+  }
+
+  /** Build the popover controls once. */
+  #buildTuningPanel(panel: HTMLDivElement): void {
     const title = document.createElement('div')
     title.className = css.tuningTitle
     title.textContent = '微调玻璃'
@@ -912,6 +930,19 @@ export class LiquidGlassController {
       panel.append(row)
     }
     panel.append(this.#tuningToggle('投影', 'shadow'), this.#tuningToggle('高光', 'specular'))
+  }
+
+  /** Refresh one on/off row without replacing the button. */
+  #syncTuningToggle(panel: HTMLDivElement, labelText: string, key: 'shadow' | 'specular'): void {
+    for (const row of panel.querySelectorAll(`.${css.tuningRow}`)) {
+      const label = row.querySelector(`.${css.tuningLabel}`)
+      if (label?.textContent !== labelText) continue
+      const button = row.querySelector('button')
+      if (button === null) continue
+      const on = this.#look[key]
+      button.setAttribute('aria-pressed', String(on))
+      button.textContent = on ? '开' : '关'
+    }
   }
 
   /** One on/off row in the tuning popover. */
