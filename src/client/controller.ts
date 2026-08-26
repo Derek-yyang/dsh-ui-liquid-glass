@@ -740,14 +740,16 @@ export class LiquidGlassController {
 
   /** Push the live look onto every tracked lens. Numeric knobs are uniforms
    * the renderer reads from `lens.options` each frame, so a field write is
-   * enough; `setShadow` is the only documented setter because the library's
-   * drop-shadow DOM is created and torn down through it. */
+   * enough. `setShadow` tears down and rebuilds the library's drop-shadow
+   * DOM — only call it when the flag actually flips, otherwise switching
+   * restrained/standard/rich hitch the popover sliders. */
   #applyLook(): void {
     const renderer = rendererHandle()
     if (renderer === undefined) return
     for (const lens of renderer.lenses) {
+      const shadowWas = lens.options.shadow
       Object.assign(lens.options, this.#look)
-      lens.setShadow(this.#look.shadow)
+      if (shadowWas !== this.#look.shadow) lens.setShadow(this.#look.shadow)
     }
   }
 

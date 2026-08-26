@@ -781,9 +781,14 @@ describe('LiquidGlassController', () => {
         expect(controller.snapshot.getSnapshot().look).toBe('restrained')
         expect(controller.snapshot.getSnapshot().lookValues).toEqual(GLASS_LOOK_PRESETS.restrained)
         expect(lens.options.refraction).toBe(GLASS_LOOK_PRESETS.restrained.refraction)
-        expect(lens.setShadow).toHaveBeenCalledWith(true)
+        const shadowCalls = lens.setShadow.mock.calls.length
+        controller.setLook('standard')
+        expect(lens.setShadow.mock.calls.length).toBe(shadowCalls)
+        controller.setLookValues({ ...GLASS_LOOK_PRESETS.standard, shadow: false })
+        expect(lens.setShadow).toHaveBeenCalledWith(false)
         await vi.advanceTimersByTime(250)
-        expect(settings.writes.filter(([field]) => field === 'refraction')).toEqual([['refraction', GLASS_LOOK_PRESETS.restrained.refraction]])
+        const refractionWrites = settings.writes.filter(([field]) => field === 'refraction')
+        expect(refractionWrites.at(-1)).toEqual(['refraction', GLASS_LOOK_PRESETS.standard.refraction])
       } finally {
         dispose()
       }
