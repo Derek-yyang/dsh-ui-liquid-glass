@@ -43,6 +43,7 @@ export function apply(ctx: ClientContext): void {
   const controller = new LiquidGlassController(ctx.theme)
   controller.attachSettings(ctx.settingsScope.bind({ namespace: SETTINGS_NAMESPACE }))
   ctx.effect(() => controller.start(), 'ui-liquid-glass: overlay controller')
+  ctx.on('theme/change', () => { controller.onPaletteChange() })
   void controller.initCustomWallpaper()
 
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-liquid-glass: dictionaries')

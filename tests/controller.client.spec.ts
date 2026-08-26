@@ -811,4 +811,32 @@ describe('LiquidGlassController', () => {
       vi.useRealTimers()
     }
   })
+
+  it('onPaletteChange recaptures after two animation frames so the CSS scheme paints first', async () => {
+    vi.useFakeTimers()
+    try {
+      const { captures } = installRenderer()
+      const { controller } = bench()
+      const dispose = controller.start()
+      try {
+        const before = captures.count
+        controller.onPaletteChange()
+        expect(captures.count).toBe(before)
+        await vi.advanceTimersByTime(16)
+        expect(captures.count).toBe(before)
+        await vi.advanceTimersByTime(16)
+        expect(captures.count).toBe(before + 1)
+
+        controller.setEnabled(false)
+        const offCount = captures.count
+        controller.onPaletteChange()
+        await vi.advanceTimersByTime(32)
+        expect(captures.count).toBe(offCount)
+      } finally {
+        dispose()
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

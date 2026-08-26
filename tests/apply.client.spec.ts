@@ -42,6 +42,30 @@ describe('ui-liquid-glass apply', () => {
     await ctx.fiber.dispose()
   })
 
+  it('a theme/change event recaptures the wallpaper snapshot', async () => {
+    vi.useFakeTimers()
+    try {
+      const { ctx } = await bench()
+      const captures = { count: 0 }
+      ;(window as unknown as Record<string, unknown>).__liquidGLRenderer__ = {
+        canvas: document.createElement('canvas'),
+        _rafId: 0,
+        render: () => {},
+        snapshotTarget: null,
+        captureSnapshot: () => { captures.count += 1 },
+        lenses: [],
+      }
+      ctx.emit('theme/change', { preference: 'dark', active: { id: 'dark', colorScheme: 'dark', tokens: {} }, themes: [], revision: 1 })
+      expect(captures.count).toBe(0)
+      await vi.advanceTimersByTime(32)
+      expect(captures.count).toBe(1)
+      await ctx.fiber.dispose()
+    } finally {
+      vi.useRealTimers()
+      delete (window as unknown as Record<string, unknown>).__liquidGLRenderer__
+    }
+  })
+
   it('disposing the fiber unmounts the surfaces and disposes the override layer', async () => {
     const { ctx, disposeLayer } = await bench()
     await ctx.fiber.dispose()

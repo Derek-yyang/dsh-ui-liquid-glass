@@ -412,6 +412,22 @@ export class LiquidGlassController {
   }
 
   /**
+   * Recapture the wallpaper after a light/dark palette flip. The CSS
+   * `:global(body[data-ds-dark-theme])` rules already repaint the live layer;
+   * the lens texture does not, so without this the composer keeps refracting
+   * the previous scheme. Two rAF ticks wait for that CSS to paint before the
+   * rasteriser runs. No-op while the theme is off.
+   */
+  onPaletteChange(): void {
+    if (!this.#enabled) return
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (this.#enabled) rendererHandle()?.captureSnapshot()
+      })
+    })
+  }
+
+  /**
    * Mount every surface for the controller's lifetime.
    * @returns the disposer that tears the dock, wallpaper, token layer, rules,
    * listeners, and observer down.
