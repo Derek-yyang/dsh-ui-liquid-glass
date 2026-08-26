@@ -147,6 +147,7 @@ export function LiquidGlassSettingsCard(
                   setLook(id as NamedGlassLook)
                 }}
                 align="end"
+                side="top"
                 portal
                 anchor={(
                   <button
@@ -177,6 +178,7 @@ export function LiquidGlassSettingsCard(
                   setPreset(id as WallpaperPreset)
                 }}
                 align="end"
+                side="top"
                 portal
                 anchor={(
                   <button
