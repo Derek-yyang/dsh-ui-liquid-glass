@@ -36,7 +36,7 @@ pnpm run watch
 
 ## 设计
 
-token 层通过 [`ctx.theme.overrideTokens`](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-theme/README.zh.md) 以本包 id 注册，叠加在用户当前的基础配色（`light`/`dark`/`system`）之上；插件卸载或开关关闭时完全消失。表面（层级面板、气泡、代码块、菜单、输入框）变为半透明；文本、状态色、遮罩和滚动条保持基础配色。侧栏是**磨砂**而非发白：fill token 保持很弱（0.18/0.25），controller 经 ui-layout 暴露的 `data-app-sidebar` 标记给侧栏列加背景模糊，壁纸在会话文字背后读成柔和的色晕，而不是白纱下清晰的噪点——早先 0.34 的 fill 叠上 frame 的半透明 `bg-base` 会合成 ~0.55 的白纱，把整列洗白。弹窗面板走共享的 `data-modal-panel` 标记拿到同一配方（ui-primitives 的对话框卡片与设置壳面板都带此标记）：半透明的 layer-2 填充罩在密排文字上，只有背景糊成色晕后才可读。完整取值见 `src/tokens.ts`。
+token 层通过 [`ctx.theme.overrideTokens`](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-theme/README.zh.md) 以本包 id 注册，叠加在用户当前的基础配色（`light`/`dark`/`system`）之上；插件卸载或开关关闭时完全消失。表面（层级面板、气泡、代码块、菜单、输入框）变为半透明；文本、状态色、遮罩和滚动条保持基础配色。侧栏是**磨砂**而非发白：fill token 保持很弱（0.18/0.25），controller 经 ui-layout 暴露的 `data-app-sidebar` 标记给侧栏列加背景模糊，壁纸在会话文字背后读成柔和的色晕，而不是白纱下清晰的噪点——早先 0.34 的 fill 叠上 frame 的半透明 `bg-base` 会合成 ~0.55 的白纱，把整列洗白。弹窗面板走共享的 `data-modal-panel` 标记拿到同一配方（ui-primitives 的对话框卡片与设置壳面板都带此标记）：半透明的 layer-2 填充罩在密排文字上，只有背景糊成色晕后才可读。设置对话框是例外：保留磨砂，但恢复不透明填充（`[role=dialog][aria-modal=true]`），这样全局通透度滑杆不会把会话文字打穿一块阅读表面。完整取值见 `src/tokens.ts`。
 
 折射目标是应用自有的输入框卡片（`data-composer-card`），不是插件自有的面板：库把卡片的填充以内联样式剥掉，把折射玻璃画在它共享的 body 级镜头画布上，而 composer 座位的层叠上下文（停靠相位是 sticky + `z-index` 7；hero 与 settling 相位由插件注入的规则垫高）保证每个字形和控件都在画布之上。调参对齐库的 demo-5 观感——中心微折射、深而窄的斜边、无磨砂，以及库的投影；投影以画布旁的 fixed 元素加卡片内联阴影的形式存在，开关切换时由插件重新驱动。快照源是插件壁纸——从不截取应用 DOM——且特意用 `position: absolute`：快照栅格化会跳过 fixed 定位元素（包括作为根传入的元素），而文档从不滚动，absolute 的绘制结果完全一致。卡片在启动之后才挂载，因此 controller 用 MutationObserver 等它出现，并在卡片重挂载后重新玻璃化。WebGL 不可用时由库自身把目标退化为 CSS `backdrop-filter` 磨砂。角落按钮（右下角）切换整个主题，关闭后它仍是重新开启的入口。
 

@@ -48,6 +48,11 @@ export const SIDEBAR_SELECTOR = '[data-app-sidebar]'
  * behind read through as sharp noise. */
 export const MODAL_PANEL_SELECTOR = '[data-modal-panel]'
 
+/** The settings shell dialog. Distinct from other `role=dialog` surfaces
+ * (ui-primitives Modal is not `aria-modal`) so this plugin can give the
+ * settings panel an opaque fill without changing global surface tokens. */
+export const SETTINGS_DIALOG_SELECTOR = '[role="dialog"][aria-modal="true"]'
+
 /** Stable selector of the app-owned conversation scrollport whose scroll
  * position drives the wallpaper's parallax translation. */
 export const SCROLL_SELECTOR = '[data-conversation-scroll]'
