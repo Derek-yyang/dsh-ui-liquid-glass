@@ -32,7 +32,7 @@ pnpm run build       # tsc emit + tsdown → lib/index.js, lib/client.js
 pnpm run watch
 ```
 
-Published `@deepseek-ai/dsh-client-*` artifacts are closure bundles for the dsh module loader, so the test lane resolves them to the source plane of a sibling deepseek-harness checkout (`git clone https://github.com/deepseek-ai/deepseek-harness ../deepseek-harness`) — the same source-plane rule in-repo development follows. Typecheck and builds stay standalone on the npm types. Rebuild (`pnpm run build`) before probing a live server: the registry serves `lib/client.js`, not sources. Push and pull requests run `pnpm run typecheck` and `pnpm run test` on GitHub Actions (`.github/workflows/ci.yml`); the test job clones harness next to this repo at tag `dsh-v0.1.1-rc.2`.
+Published `@deepseek-ai/dsh-client-*` artifacts are closure bundles for the dsh module loader, so the test lane resolves them to the source plane of a sibling deepseek-harness checkout (`git clone https://github.com/deepseek-ai/deepseek-harness ../deepseek-harness`) — the same source-plane rule in-repo development follows. Typecheck and builds stay standalone on the npm types. Rebuild (`pnpm run build`) before probing a live server: the registry serves `lib/client.js`, not sources. Push and pull requests run `pnpm run typecheck` and `pnpm run test` on GitHub Actions (`.github/workflows/ci.yml`); the test job clones harness next to this repo at tag `dsh-v0.1.1-rc.2` and installs both lockfiles, because vitest resolves `@deepseek-ai/*` to harness sources.
 
 ## Design
 

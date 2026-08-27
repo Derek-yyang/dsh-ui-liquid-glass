@@ -32,7 +32,7 @@ pnpm run build       # tsc 产物 + tsdown → lib/index.js, lib/client.js
 pnpm run watch
 ```
 
-已发布的 `@deepseek-ai/dsh-client-*` 产物是面向 dsh 模块加载器的闭包格式，vitest 无法直接导入，所以测试链路把这类包重定向到旁边 deepseek-harness 克隆的源码平面（`git clone https://github.com/deepseek-ai/deepseek-harness ../deepseek-harness`）——与仓库内开发遵守同一条源码平面规则。typecheck 与构建保持独立，只依赖 npm 类型。探测运行中的服务器前先重新构建（`pnpm run build`）：注册表服务的是 `lib/client.js`，不是源码。push 与 pull request 会在 GitHub Actions（`.github/workflows/ci.yml`）上跑 `pnpm run typecheck` 和 `pnpm run test`；测试任务会把 harness 克隆到旁边，并钉在 tag `dsh-v0.1.1-rc.2`。
+已发布的 `@deepseek-ai/dsh-client-*` 产物是面向 dsh 模块加载器的闭包格式，vitest 无法直接导入，所以测试链路把这类包重定向到旁边 deepseek-harness 克隆的源码平面（`git clone https://github.com/deepseek-ai/deepseek-harness ../deepseek-harness`）——与仓库内开发遵守同一条源码平面规则。typecheck 与构建保持独立，只依赖 npm 类型。探测运行中的服务器前先重新构建（`pnpm run build`）：注册表服务的是 `lib/client.js`，不是源码。push 与 pull request 会在 GitHub Actions（`.github/workflows/ci.yml`）上跑 `pnpm run typecheck` 和 `pnpm run test`；测试任务会把 harness 克隆到旁边并钉在 tag `dsh-v0.1.1-rc.2`，两边 lockfile 都装，因为 vitest 会把 `@deepseek-ai/*` 指到 harness 源码。
 
 ## 设计
 

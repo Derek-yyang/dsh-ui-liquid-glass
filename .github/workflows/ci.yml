@@ -35,16 +35,25 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 11
 
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: dsh-ui-liquid-glass/pnpm-lock.yaml
+          cache-dependency-path: |
+            dsh-ui-liquid-glass/pnpm-lock.yaml
+            deepseek-harness/pnpm-lock.yaml
 
-      - name: Install
+      - name: Install plugin
+        run: pnpm install --frozen-lockfile
+
+      # vitest aliases @deepseek-ai/* to harness sources. Vite then resolves
+      # those files' bare imports (clsx, zod, @testing-library/react, …)
+      # from the harness tree, not from this plugin's node_modules.
+      - name: Install deepseek-harness
+        working-directory: deepseek-harness
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck
