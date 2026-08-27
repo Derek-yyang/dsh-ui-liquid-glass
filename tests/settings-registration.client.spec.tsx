@@ -22,7 +22,7 @@ const RICH = GLASS_LOOK_PRESETS[DEFAULT_LOOK]
 function hostSection(
   partial: Partial<LiquidGlassHostSection> & Pick<LiquidGlassHostSection, 'enabled' | 'preset'>,
 ): LiquidGlassHostSection {
-  return { veil: 100, clarity: 0, ...RICH, ...partial }
+  return { clarity: 0, ...RICH, ...partial }
 }
 
 usePinnedBrowserLanguages('zh-CN')
@@ -100,7 +100,7 @@ describe('ui-liquid-glass browser plugin settings registration', () => {
 
     const injected = (entry.inject as unknown as () => LiquidGlassSettingsCardInjected)()
     expect(injected.hooks.snapshot.getSnapshot()).toEqual({
-      enabled: true, preset: 'ridge', gallery: [], veil: 100, clarity: 0,
+      enabled: true, preset: 'ridge', gallery: [], clarity: 0,
       look: DEFAULT_LOOK, lookValues: RICH,
     })
 

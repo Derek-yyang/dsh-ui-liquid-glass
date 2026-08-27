@@ -20,7 +20,7 @@ const RICH = GLASS_LOOK_PRESETS[DEFAULT_LOOK]
 
 function cardState(partial: Partial<LiquidGlassSnapshot> & Pick<LiquidGlassSnapshot, 'enabled' | 'preset'>): LiquidGlassSnapshot {
   return {
-    gallery: [], veil: 100, clarity: 0, look: DEFAULT_LOOK, lookValues: { ...RICH }, ...partial,
+    gallery: [], clarity: 0, look: DEFAULT_LOOK, lookValues: { ...RICH }, ...partial,
   }
 }
 
@@ -43,8 +43,6 @@ function mount(snapshot: LiquidGlassSnapshot) {
   const store = createSnapshotStore<LiquidGlassSnapshot>(snapshot)
   const setEnabled = vi.fn()
   const setPreset = vi.fn()
-  const setVeil = vi.fn()
-  const setClarity = vi.fn()
   const setLook = vi.fn()
   const uploadCustom = vi.fn(async (_image: File) => {})
   const removeCustom = vi.fn(async (_id: string) => {})
@@ -54,15 +52,13 @@ function mount(snapshot: LiquidGlassSnapshot) {
     useSnapshot: bindSnapshotSelector(store),
     setEnabled,
     setPreset,
-    setVeil,
-    setClarity,
     setLook,
     uploadCustom,
     removeCustom,
     t: makeTranslate(en),
   }
   render(<LiquidGlassSettingsCard {...props} />)
-  return { store, setEnabled, setPreset, setVeil, setClarity, setLook, uploadCustom, removeCustom }
+  return { store, setEnabled, setPreset, setLook, uploadCustom, removeCustom }
 }
 
 function openBody(): void {
@@ -111,7 +107,6 @@ describe('LiquidGlassSettingsCard', () => {
       enabled: true,
       preset: 'c_one',
       gallery: [{ id: 'one', url: 'blob:one' }],
-      veil: 60,
     }))
     openBody()
     fireEvent.click(screen.getByRole('button', { name: /Custom image 1/ }))
@@ -120,32 +115,13 @@ describe('LiquidGlassSettingsCard', () => {
     expect(removeCustom).toHaveBeenCalledWith('one')
   })
 
-  it('the veil slider renders only for the custom preset, shows the percent, and routes changes to setVeil', () => {
-    // The veil paints only the custom image; other presets hide the row.
-    mount(cardState({ enabled: true, preset: 'ridge' }))
-    openBody()
-    expect(screen.queryByRole('slider', { name: 'Veil strength' })).toBeNull()
-
-    cleanup()
-    const { setVeil } = mount(cardState({
-      enabled: true, preset: 'c_one', gallery: [{ id: 'one', url: 'blob:one' }], veil: 60,
+  it('the settings card does not host veil or clarity sliders', () => {
+    mount(cardState({
+      enabled: true, preset: 'c_one', gallery: [{ id: 'one', url: 'blob:one' }],
     }))
     openBody()
-    const slider = screen.getByRole('slider', { name: 'Veil strength' }) as HTMLInputElement
-    expect(slider.value).toBe('60')
-    expect(screen.getByText('60%')).toBeDefined()
-    fireEvent.change(slider, { target: { value: '30' } })
-    expect(setVeil).toHaveBeenCalledWith(30)
-  })
-
-  it('the clarity slider renders for every preset and routes changes to setClarity', () => {
-    const { setClarity } = mount(cardState({ enabled: true, preset: 'ridge', clarity: 40 }))
-    openBody()
-    const slider = screen.getByRole('slider', { name: 'Clarity' }) as HTMLInputElement
-    expect(slider.value).toBe('40')
-    expect(screen.getByText('40%')).toBeDefined()
-    fireEvent.change(slider, { target: { value: '100' } })
-    expect(setClarity).toHaveBeenCalledWith(100)
+    expect(screen.queryByRole('slider', { name: 'Veil strength' })).toBeNull()
+    expect(screen.queryByRole('slider', { name: 'Clarity' })).toBeNull()
   })
 
   it('the look picker shows the active look and routes a named pick to setLook', () => {

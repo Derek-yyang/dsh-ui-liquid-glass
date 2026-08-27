@@ -10,7 +10,7 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import { WALLPAPER_PRESETS, type WallpaperPreset } from '../tokens.ts'
 import { GLASS_LOOKS } from '../look.ts'
 import type { GlassLookId, NamedGlassLook } from '../look.ts'
-import { customPresetId, galleryIdFromPreset } from './wallpaper-store.ts'
+import { customPresetId } from './wallpaper-store.ts'
 import type { LiquidGlassSnapshot } from './controller.ts'
 import type { LiquidGlassLocaleKey } from './locales.ts'
 import css from './glass.module.css'
@@ -25,10 +25,6 @@ export interface LiquidGlassSettingsCardInjected {
   setEnabled(enabled: boolean): void
   /** Switch the wallpaper preset. */
   setPreset(preset: WallpaperPreset): void
-  /** Scale the custom-image veil (0–100). */
-  setVeil(percent: number): void
-  /** Scale the glass surface tint clarity (0–100). */
-  setClarity(percent: number): void
   /** Apply a named look calibration. */
   setLook(id: NamedGlassLook): void
   /** Persist an uploaded image, append it to the gallery, and make it active. */
@@ -65,7 +61,7 @@ const LOOK_LABEL: Record<GlassLookId, LiquidGlassLocaleKey> = {
  */
 export function LiquidGlassSettingsCard(
   {
-    useSnapshot, setEnabled, setPreset, setVeil, setClarity, setLook, uploadCustom, removeCustom, t,
+    useSnapshot, setEnabled, setPreset, setLook, uploadCustom, removeCustom, t,
   }: LiquidGlassSettingsCardProps,
 ): ReactNode {
   const snapshot = useSnapshot(value => value)
@@ -107,25 +103,6 @@ export function LiquidGlassSettingsCard(
               >
                 {snapshot.enabled ? t('stateOn') : t('stateOff')}
               </button>
-            </div>
-            <div className={css.settingsRow}>
-              <div className={css.settingsRowText}>
-                <div className={css.settingsRowTitle}>{t('clarityTitle')}</div>
-                <div className={css.settingsRowDesc}>{t('clarityDescription')}</div>
-              </div>
-              <span className={css.settingsSliderGroup}>
-                <input
-                  type="range"
-                  className={css.settingsSlider}
-                  min={0}
-                  max={100}
-                  step={5}
-                  value={snapshot.clarity}
-                  aria-label={t('clarityTitle')}
-                  onChange={(event) => { setClarity(Number(event.target.value)) }}
-                />
-                <span className={css.settingsSliderValue}>{snapshot.clarity}%</span>
-              </span>
             </div>
             <div className={css.settingsRow}>
               <div className={css.settingsRowText}>
@@ -220,27 +197,6 @@ export function LiquidGlassSettingsCard(
                 />
               </div>
             </div>
-            {galleryIdFromPreset(snapshot.preset) !== undefined && (
-              <div className={css.settingsRow}>
-                <div className={css.settingsRowText}>
-                  <div className={css.settingsRowTitle}>{t('veilTitle')}</div>
-                  <div className={css.settingsRowDesc}>{t('veilDescription')}</div>
-                </div>
-                <span className={css.settingsSliderGroup}>
-                  <input
-                    type="range"
-                    className={css.settingsSlider}
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={snapshot.veil}
-                    aria-label={t('veilTitle')}
-                    onChange={(event) => { setVeil(Number(event.target.value)) }}
-                  />
-                  <span className={css.settingsSliderValue}>{snapshot.veil}%</span>
-                </span>
-              </div>
-            )}
           </div>
         )
         : null}

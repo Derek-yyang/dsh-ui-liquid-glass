@@ -23,9 +23,6 @@ export interface LiquidGlassConfig {
   /** Active wallpaper preset. `collage` is a retired id accepted so old Host
    * documents still resolve; the browser half paints `ridge` for it. */
   preset: string
-  /** Custom-image veil strength in percent (0–100); 100 is the shipped
-   * calibration, 0 shows the raw image. */
-  veil: number
   /** Surface clarity in percent (0–100); 0 is the shipped calibration, 100
    * fades static surface fills to transparent over the wallpaper. */
   clarity: number
@@ -54,7 +51,6 @@ export interface LiquidGlassConfig {
 export const Config: z<LiquidGlassConfig> = z.object({
   enabled: z.boolean().default(true),
   preset: z.string().default('ridge'),
-  veil: z.number().step(1).min(0).max(100).default(100),
   clarity: z.number().step(1).min(0).max(100).default(0),
   refraction: z.number().min(0).max(1).default(RICH.refraction),
   bevelDepth: z.number().min(0).max(1).default(RICH.bevelDepth),

@@ -21,8 +21,6 @@ export interface LiquidGlassHostSection extends GlassLookValues {
   enabled: boolean
   /** Active wallpaper preset id. */
   preset: string
-  /** Custom-image veil strength in percent (0–100). */
-  veil: number
   /** Surface clarity in percent (0–100). */
   clarity: number
 }

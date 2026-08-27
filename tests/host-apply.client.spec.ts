@@ -6,7 +6,7 @@ import { apply, Config, SETTINGS_NAMESPACE } from '../src/index.ts'
 import { DEFAULT_LOOK, GLASS_LOOK_PRESETS } from '../src/look.ts'
 
 const RICH = GLASS_LOOK_PRESETS[DEFAULT_LOOK]
-const coast = { enabled: true as const, preset: 'coast' as const, veil: 100, clarity: 0, ...RICH }
+const coast = { enabled: true as const, preset: 'coast' as const, clarity: 0, ...RICH }
 
 describe('ui-liquid-glass host apply', () => {
   it('registers the settings namespace with the composition entry as the base layer', async () => {
