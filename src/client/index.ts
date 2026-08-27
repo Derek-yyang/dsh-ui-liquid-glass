@@ -52,7 +52,6 @@ export function apply(ctx: ClientContext): void {
     hooks: { snapshot: controller.snapshot },
     setEnabled: (enabled) => { controller.setEnabled(enabled) },
     setPreset: (preset) => { controller.setPreset(preset) },
-    setLook: (id) => { controller.setLook(id) },
     uploadCustom: image => controller.uploadCustomWallpaper(image),
     removeCustom: id => controller.removeCustomWallpaper(id),
   })

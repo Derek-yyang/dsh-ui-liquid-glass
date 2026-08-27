@@ -25,8 +25,6 @@ declare module '*/glass.module.css' {
     readonly settingsRowTitle: string
     readonly settingsRowDesc: string
     readonly settingsToggle: string
-    readonly settingsSelector: string
-    readonly settingsSliderGroup: string
     readonly settingsSlider: string
     readonly settingsSliderValue: string
     readonly gallery: string

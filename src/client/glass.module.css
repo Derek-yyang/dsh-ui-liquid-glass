@@ -323,8 +323,7 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.settingsToggle,
-.settingsSelector {
+.settingsToggle {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -340,15 +339,6 @@
 .settingsToggle[aria-pressed='true'] {
   border-color: var(--dsw-alias-button-ghost-active-border);
   background: var(--dsw-alias-button-ghost-active-fill);
-}
-
-/* Veil-strength slider group (custom preset only): range input plus a
- * tabular percent readout so the number does not wiggle while dragging. */
-.settingsSliderGroup {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .settingsSlider {

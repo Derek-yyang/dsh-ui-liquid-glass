@@ -43,7 +43,6 @@ function mount(snapshot: LiquidGlassSnapshot) {
   const store = createSnapshotStore<LiquidGlassSnapshot>(snapshot)
   const setEnabled = vi.fn()
   const setPreset = vi.fn()
-  const setLook = vi.fn()
   const uploadCustom = vi.fn(async (_image: File) => {})
   const removeCustom = vi.fn(async (_id: string) => {})
   const props: LiquidGlassSettingsCardProps = {
@@ -52,13 +51,12 @@ function mount(snapshot: LiquidGlassSnapshot) {
     useSnapshot: bindSnapshotSelector(store),
     setEnabled,
     setPreset,
-    setLook,
     uploadCustom,
     removeCustom,
     t: makeTranslate(en),
   }
   render(<LiquidGlassSettingsCard {...props} />)
-  return { store, setEnabled, setPreset, setLook, uploadCustom, removeCustom }
+  return { store, setEnabled, setPreset, uploadCustom, removeCustom }
 }
 
 function openBody(): void {
@@ -124,18 +122,11 @@ describe('LiquidGlassSettingsCard', () => {
     expect(screen.queryByRole('slider', { name: 'Clarity' })).toBeNull()
   })
 
-  it('the look picker shows the active look and routes a named pick to setLook', () => {
-    const { setLook } = mount(cardState({ enabled: true, preset: 'ridge' }))
-    openBody()
-    fireEvent.click(screen.getByRole('button', { name: 'Rich' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Restrained' }))
-    expect(setLook).toHaveBeenCalledWith('restrained')
-  })
-
-  it('the settings card does not host the advanced look knobs', () => {
+  it('the settings card does not host the look picker or advanced knobs', () => {
     mount(cardState({ enabled: true, preset: 'ridge' }))
     openBody()
+    expect(screen.queryByRole('button', { name: 'Rich' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Restrained' })).toBeNull()
     expect(screen.queryByRole('slider', { name: 'Refraction' })).toBeNull()
-    expect(screen.queryByRole('button', { name: /Advanced/ })).toBeNull()
   })
 })

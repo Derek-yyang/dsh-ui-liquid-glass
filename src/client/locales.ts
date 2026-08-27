@@ -3,7 +3,7 @@
 /** Simplified Chinese dictionary and key source of truth. */
 export const zh = {
   cardTitle: '液态玻璃',
-  cardDescription: '玻璃主题的开关、观感与壁纸偏好。',
+  cardDescription: '玻璃主题的开关与壁纸。观感在右键水滴的微调面板里调。',
   effectTitle: '液态玻璃效果',
   effectDescription: '半透明玻璃表面、折射输入框与随滚动联动的壁纸。右下角水滴：单击开关，长按切壁纸，右键打开微调面板（含通透度）。',
   dockAria: '切换液态玻璃效果',
@@ -50,7 +50,7 @@ export type LiquidGlassLocaleKey = keyof typeof zh
 /** English dictionary checked against the Chinese key set. */
 export const en: Record<LiquidGlassLocaleKey, string> = {
   cardTitle: 'Liquid Glass',
-  cardDescription: 'Glass theme toggle, look, and wallpaper preference.',
+  cardDescription: 'Glass theme toggle and wallpaper. Fine-tune the look from the droplet popover.',
   effectTitle: 'Liquid glass effect',
   effectDescription: 'Translucent glass surfaces, a refracting composer, and a scroll-synced wallpaper. The droplet: click to toggle, long-press to cycle wallpapers, right-click to fine-tune the glass (including clarity).',
   dockAria: 'Toggle liquid glass',

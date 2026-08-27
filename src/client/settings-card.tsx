@@ -1,15 +1,13 @@
 /** The Liquid Glass card inside the Plugins settings section's configurable
- * tab: the theme toggle, the look picker, the wallpaper preset selector, and
- * the custom-image upload, driven through the controller's inject face and
- * its published snapshot. */
+ * tab: the theme toggle and the wallpaper gallery, driven through the
+ * controller's inject face and its published snapshot. Look and clarity live
+ * on the droplet popover. */
 
 import { useRef, useState, type ReactNode } from 'react'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { WALLPAPER_PRESETS, type WallpaperPreset } from '../tokens.ts'
-import { GLASS_LOOKS } from '../look.ts'
-import type { GlassLookId, NamedGlassLook } from '../look.ts'
 import { customPresetId } from './wallpaper-store.ts'
 import type { LiquidGlassSnapshot } from './controller.ts'
 import type { LiquidGlassLocaleKey } from './locales.ts'
@@ -25,8 +23,6 @@ export interface LiquidGlassSettingsCardInjected {
   setEnabled(enabled: boolean): void
   /** Switch the wallpaper preset. */
   setPreset(preset: WallpaperPreset): void
-  /** Apply a named look calibration. */
-  setLook(id: NamedGlassLook): void
   /** Persist an uploaded image, append it to the gallery, and make it active. */
   uploadCustom(image: File): Promise<void>
   /** Remove one custom image from this device. */
@@ -48,30 +44,18 @@ const PRESET_LABEL: Record<(typeof WALLPAPER_PRESETS)[number], LiquidGlassLocale
   arch: 'presetArch',
 }
 
-const LOOK_LABEL: Record<GlassLookId, LiquidGlassLocaleKey> = {
-  restrained: 'lookRestrained',
-  standard: 'lookStandard',
-  rich: 'lookRich',
-  custom: 'lookCustom',
-}
-
 /** Render the Liquid Glass preference card.
  * @param props - locale copy, the state store, and the write paths.
  * @returns the card, or nothing while the namespace has not loaded.
  */
 export function LiquidGlassSettingsCard(
   {
-    useSnapshot, setEnabled, setPreset, setLook, uploadCustom, removeCustom, t,
+    useSnapshot, setEnabled, setPreset, uploadCustom, removeCustom, t,
   }: LiquidGlassSettingsCardProps,
 ): ReactNode {
   const snapshot = useSnapshot(value => value)
   const [open, setOpen] = useState(false)
-  const [lookMenuOpen, setLookMenuOpen] = useState(false)
   const fileInput = useRef<HTMLInputElement | null>(null)
-  const lookItems = [
-    ...GLASS_LOOKS.map(id => ({ id, label: t(LOOK_LABEL[id]) })),
-    ...(snapshot.look === 'custom' ? [{ id: 'custom' as GlassLookId, label: t('lookCustom') }] : []),
-  ]
 
   return (
     <li className={css.card}>
@@ -103,38 +87,6 @@ export function LiquidGlassSettingsCard(
               >
                 {snapshot.enabled ? t('stateOn') : t('stateOff')}
               </button>
-            </div>
-            <div className={css.settingsRow}>
-              <div className={css.settingsRowText}>
-                <div className={css.settingsRowTitle}>{t('lookTitle')}</div>
-                <div className={css.settingsRowDesc}>{t('lookDescription')}</div>
-              </div>
-              <Menu
-                open={lookMenuOpen}
-                onClose={() => { setLookMenuOpen(false) }}
-                items={lookItems}
-                selectedId={snapshot.look}
-                onSelect={(id) => {
-                  setLookMenuOpen(false)
-                  if (id === 'custom') return
-                  setLook(id as NamedGlassLook)
-                }}
-                align="end"
-                side="top"
-                portal
-                anchor={(
-                  <button
-                    type="button"
-                    className={css.settingsSelector}
-                    aria-haspopup="menu"
-                    aria-expanded={lookMenuOpen}
-                    onClick={() => { setLookMenuOpen(value => !value) }}
-                  >
-                    {t(LOOK_LABEL[snapshot.look])}
-                    <IconChevronDownOutline14 size={12} aria-hidden="true" />
-                  </button>
-                )}
-              />
             </div>
             <div>
               <div className={css.settingsRowTitle}>{t('presetTitle')}</div>
