@@ -20,7 +20,7 @@ const RICH = GLASS_LOOK_PRESETS[DEFAULT_LOOK]
 
 function cardState(partial: Partial<LiquidGlassSnapshot> & Pick<LiquidGlassSnapshot, 'enabled' | 'preset'>): LiquidGlassSnapshot {
   return {
-    custom: false, veil: 100, clarity: 0, look: DEFAULT_LOOK, lookValues: { ...RICH }, ...partial,
+    gallery: [], veil: 100, clarity: 0, look: DEFAULT_LOOK, lookValues: { ...RICH }, ...partial,
   }
 }
 
@@ -47,6 +47,7 @@ function mount(snapshot: LiquidGlassSnapshot) {
   const setClarity = vi.fn()
   const setLook = vi.fn()
   const uploadCustom = vi.fn(async (_image: File) => {})
+  const removeCustom = vi.fn(async (_id: string) => {})
   const props: LiquidGlassSettingsCardProps = {
     useSessions: emptySessions(),
     useWorkspaces: emptyWorkspaces(),
@@ -57,10 +58,11 @@ function mount(snapshot: LiquidGlassSnapshot) {
     setClarity,
     setLook,
     uploadCustom,
+    removeCustom,
     t: makeTranslate(en),
   }
   render(<LiquidGlassSettingsCard {...props} />)
-  return { store, setEnabled, setPreset, setVeil, setClarity, setLook, uploadCustom }
+  return { store, setEnabled, setPreset, setVeil, setClarity, setLook, uploadCustom, removeCustom }
 }
 
 function openBody(): void {
@@ -88,11 +90,10 @@ describe('LiquidGlassSettingsCard', () => {
     expect(screen.getByRole('button', { name: 'On' }).getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('the preset selector shows the active preset and routes the menu pick to setPreset', () => {
+  it('the gallery tiles the built-in scenes and routes a pick to setPreset', () => {
     const { setPreset } = mount(cardState({ enabled: true, preset: 'ridge' }))
     openBody()
-    fireEvent.click(screen.getByRole('button', { name: 'Ridge line art' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Coast line art' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Coast line art' }))
     expect(setPreset).toHaveBeenCalledWith('coast')
   })
 
@@ -105,11 +106,18 @@ describe('LiquidGlassSettingsCard', () => {
     expect(uploadCustom).toHaveBeenCalledWith(image)
   })
 
-  it('the custom preset appears in the menu only after an upload exists', () => {
-    mount(cardState({ enabled: true, preset: 'custom', custom: true, veil: 60 }))
+  it('custom gallery tiles appear after an upload and can be deleted', () => {
+    const { setPreset, removeCustom } = mount(cardState({
+      enabled: true,
+      preset: 'c_one',
+      gallery: [{ id: 'one', url: 'blob:one' }],
+      veil: 60,
+    }))
     openBody()
-    fireEvent.click(screen.getByRole('button', { name: 'Custom image' }))
-    expect(screen.getByRole('menuitem', { name: 'Custom image' })).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: /Custom image 1/ }))
+    expect(setPreset).toHaveBeenCalledWith('c_one')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this image' }))
+    expect(removeCustom).toHaveBeenCalledWith('one')
   })
 
   it('the veil slider renders only for the custom preset, shows the percent, and routes changes to setVeil', () => {
@@ -119,7 +127,9 @@ describe('LiquidGlassSettingsCard', () => {
     expect(screen.queryByRole('slider', { name: 'Veil strength' })).toBeNull()
 
     cleanup()
-    const { setVeil } = mount(cardState({ enabled: true, preset: 'custom', custom: true, veil: 60 }))
+    const { setVeil } = mount(cardState({
+      enabled: true, preset: 'c_one', gallery: [{ id: 'one', url: 'blob:one' }], veil: 60,
+    }))
     openBody()
     const slider = screen.getByRole('slider', { name: 'Veil strength' }) as HTMLInputElement
     expect(slider.value).toBe('60')

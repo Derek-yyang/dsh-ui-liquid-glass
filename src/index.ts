@@ -22,7 +22,7 @@ export interface LiquidGlassConfig {
   enabled: boolean
   /** Active wallpaper preset. `collage` is a retired id accepted so old Host
    * documents still resolve; the browser half paints `ridge` for it. */
-  preset: 'ridge' | 'coast' | 'garden' | 'arch' | 'custom' | 'collage'
+  preset: string
   /** Custom-image veil strength in percent (0–100); 100 is the shipped
    * calibration, 0 shows the raw image. */
   veil: number
@@ -53,7 +53,7 @@ export interface LiquidGlassConfig {
  * fields keep the look they already had. */
 export const Config: z<LiquidGlassConfig> = z.object({
   enabled: z.boolean().default(true),
-  preset: z.union(['ridge', 'coast', 'garden', 'arch', 'custom', 'collage']).default('ridge'),
+  preset: z.string().default('ridge'),
   veil: z.number().step(1).min(0).max(100).default(100),
   clarity: z.number().step(1).min(0).max(100).default(0),
   refraction: z.number().min(0).max(1).default(RICH.refraction),

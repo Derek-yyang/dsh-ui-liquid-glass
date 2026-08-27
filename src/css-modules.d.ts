@@ -29,6 +29,14 @@ declare module '*/glass.module.css' {
     readonly settingsSliderGroup: string
     readonly settingsSlider: string
     readonly settingsSliderValue: string
+    readonly gallery: string
+    readonly galleryTile: string
+    readonly gallerySelected: string
+    readonly galleryCaption: string
+    readonly galleryThumb: string
+    readonly galleryDelete: string
+    readonly galleryAdd: string
+    readonly galleryAddMark: string
     readonly tuning: string
     readonly tuningTitle: string
     readonly tuningRow: string

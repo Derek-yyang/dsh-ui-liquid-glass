@@ -100,7 +100,7 @@ describe('ui-liquid-glass browser plugin settings registration', () => {
 
     const injected = (entry.inject as unknown as () => LiquidGlassSettingsCardInjected)()
     expect(injected.hooks.snapshot.getSnapshot()).toEqual({
-      enabled: true, preset: 'ridge', custom: false, veil: 100, clarity: 0,
+      enabled: true, preset: 'ridge', gallery: [], veil: 100, clarity: 0,
       look: DEFAULT_LOOK, lookValues: RICH,
     })
 

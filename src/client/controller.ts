@@ -10,7 +10,10 @@ import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runti
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
 import css from './glass.module.css'
-import { loadCustomWallpaper, saveCustomWallpaper } from './wallpaper-store.ts'
+import {
+  addGalleryImage, customPresetId, galleryIdFromPreset, loadGallery, removeGalleryImage,
+} from './wallpaper-store.ts'
+import type { GalleryRecord } from './wallpaper-store.ts'
 import {
   CLARITY_DEFAULT_PERCENT, COMPOSER_SELECTOR, GLASS_MARKER, LIQUID_GLASS_TOKENS,
   MODAL_PANEL_SELECTOR, PACKAGE_ID, SCROLL_SELECTOR, SEAT_SELECTOR,
@@ -84,17 +87,19 @@ const LONG_PRESS_MS = 450
 const SLIDER_WRITE_DEBOUNCE_MS = 250
 
 /** Preset id → CSS module class carrying the preset's paint. */
-const WALLPAPER_CLASSES: Record<Exclude<WallpaperPreset, 'collage'>, string> = {
+const WALLPAPER_CLASSES = {
   ridge: css.ridge,
   coast: css.coast,
   garden: css.garden,
   arch: css.arch,
   custom: css.custom,
-}
+} as const
 
-/** Retired `collage` Host ids paint as `ridge`. */
-function resolveWallpaperPreset(preset: WallpaperPreset): Exclude<WallpaperPreset, 'collage'> {
-  return preset === 'collage' ? 'ridge' : preset
+/** Built-in paint id for a Host preset. Retired `collage` and unknown ids
+ * fall back to `ridge`; custom gallery ids are handled by the caller. */
+function resolveWallpaperPreset(preset: WallpaperPreset): keyof typeof WALLPAPER_CLASSES {
+  if (preset === 'coast' || preset === 'garden' || preset === 'arch' || preset === 'ridge') return preset
+  return 'ridge'
 }
 
 /** One glassified lens the window-global renderer tracks (undocumented
@@ -145,8 +150,8 @@ export interface LiquidGlassSnapshot {
   enabled: boolean
   /** Active wallpaper preset id. */
   preset: WallpaperPreset
-  /** Whether a custom image has been uploaded on this device. */
-  custom: boolean
+  /** Object URLs of custom images on this device, oldest first. */
+  gallery: readonly { id: string; url: string }[]
   /** Custom-image veil strength in percent (0–100); 100 is the shipped
    * calibration, 0 shows the raw image. */
   veil: number
@@ -184,9 +189,8 @@ export class LiquidGlassController {
    * each field; a stale generation must not `#adopt` a half-applied bag, and
    * a newer persist must not let an older Promise.all reopen the gate. */
   #lookWriteGeneration = 0
-  /** Object URL of the uploaded custom image; undefined until one loads or is
-   * uploaded on this device. */
-  #customUrl: string | undefined
+  /** Custom images on this device, oldest first. */
+  #gallery: { id: string; blob: Blob; url: string }[] = []
   #dock: HTMLButtonElement | undefined
   #tuning: HTMLDivElement | undefined
   #outsidePointer: ((event: Event) => void) | undefined
@@ -218,41 +222,50 @@ export class LiquidGlassController {
   constructor(theme: ThemeRuntime) {
     this.#theme = theme
     this.snapshot = createSnapshotStore({
-      enabled: this.#enabled, preset: this.#preset, custom: false, veil: this.#veil, clarity: this.#clarity,
+      enabled: this.#enabled, preset: this.#preset, gallery: [], veil: this.#veil, clarity: this.#clarity,
       look: DEFAULT_LOOK, lookValues: { ...this.#look },
     })
   }
 
-  /** Load the device-local custom image, if one was uploaded before. The
-   * snapshot's `custom` flag flips once it exists; a scope holding
-   * `preset: 'custom'` repaints at that point. */
+  /** Load every device-local custom image. A scope holding a `c_*` / `custom`
+   * preset repaints once the matching blob is in memory. */
   async initCustomWallpaper(): Promise<void> {
-    const blob = await loadCustomWallpaper()
-    if (blob === undefined) return
-    this.#customUrl = URL.createObjectURL(blob)
+    const records = await loadGallery()
+    this.#gallery = records.map(record => ({
+      id: record.id, blob: record.blob, url: URL.createObjectURL(record.blob),
+    }))
     this.#publish()
-    if (this.#preset === 'custom' && this.#wallpaper !== undefined) {
+    if (galleryIdFromPreset(this.#preset) !== undefined && this.#wallpaper !== undefined) {
       this.#crossfadeWallpaper()
     }
   }
 
   /**
-   * Persist an uploaded image and make it the active preset. The previous
-   * object URL is revoked only after the repaint switched to the new one.
+   * Persist an uploaded image, append it to the gallery, and make it active.
    * @param blob - the image bytes to store device-local in IndexedDB.
    * @returns resolves once the image is stored and the preset switched.
    */
   async uploadCustomWallpaper(blob: Blob): Promise<void> {
-    await saveCustomWallpaper(blob)
-    const previous = this.#customUrl
-    this.#customUrl = URL.createObjectURL(blob)
-    this.setPreset('custom')
-    // The outgoing clone still paints the previous URL through the crossfade;
-    // hold the revoke until that clone is gone (immediate if the fade skipped).
-    if (previous !== undefined) {
-      if (this.#outgoing !== undefined) this.#pendingRevoke = previous
-      else URL.revokeObjectURL(previous)
+    const record: GalleryRecord = await addGalleryImage(blob)
+    this.#gallery = [...this.#gallery, { id: record.id, blob: record.blob, url: URL.createObjectURL(record.blob) }]
+    this.setPreset(customPresetId(record.id))
+  }
+
+  /**
+   * Remove one custom image. If it was active, fall back to `ridge`.
+   * @param id - gallery record id.
+   * @returns resolves once the record is gone.
+   */
+  async removeCustomWallpaper(id: string): Promise<void> {
+    await removeGalleryImage(id)
+    const gone = this.#gallery.find(entry => entry.id === id)
+    this.#gallery = this.#gallery.filter(entry => entry.id !== id)
+    if (gone !== undefined) {
+      if (this.#outgoing !== undefined) this.#pendingRevoke = gone.url
+      else URL.revokeObjectURL(gone.url)
     }
+    if (galleryIdFromPreset(this.#preset) === id) this.setPreset('ridge')
+    else this.#publish()
   }
 
   /**
@@ -278,7 +291,7 @@ export class LiquidGlassController {
     const value = section.value
     this.#setState({
       enabled: value.enabled,
-      preset: value.preset,
+      preset: value.preset as WallpaperPreset,
       veil: value.veil,
       clarity: value.clarity,
       look: {
@@ -331,7 +344,7 @@ export class LiquidGlassController {
     this.snapshot.set({
       enabled: this.#enabled,
       preset: this.#preset,
-      custom: this.#customUrl !== undefined,
+      gallery: this.#gallery.map(entry => ({ id: entry.id, url: entry.url })),
       veil: this.#veil,
       clarity: this.#clarity,
       look: lookIdFor(this.#look),
@@ -631,13 +644,13 @@ export class LiquidGlassController {
   #applyWallpaperPreset(wallpaper: HTMLElement): void {
     // A custom preset without a loaded image (first boot before IndexedDB
     // answers, or another device) falls back to the default scene.
-    const preset = this.#preset === 'custom' && this.#customUrl === undefined
-      ? 'ridge'
-      : resolveWallpaperPreset(this.#preset)
-    wallpaper.className = `${css.wallpaper} ${WALLPAPER_CLASSES[preset]}`
+    const galleryId = galleryIdFromPreset(this.#preset)
+    const custom = galleryId === undefined ? undefined : this.#gallery.find(entry => entry.id === galleryId)
+    const preset = custom === undefined ? resolveWallpaperPreset(this.#preset) : 'custom'
+    wallpaper.className = `${css.wallpaper} ${WALLPAPER_CLASSES[preset === 'custom' ? 'custom' : preset]}`
     this.#applyVeil(wallpaper)
-    if (preset === 'custom') {
-      wallpaper.style.setProperty('--dsh-liquid-glass-custom-image', `url("${this.#customUrl}")`)
+    if (custom !== undefined) {
+      wallpaper.style.setProperty('--dsh-liquid-glass-custom-image', `url("${custom.url}")`)
     } else {
       wallpaper.style.removeProperty('--dsh-liquid-glass-custom-image')
     }
@@ -1028,6 +1041,8 @@ export class LiquidGlassController {
     this.#closeTuningPanel()
     this.#dock?.remove()
     this.#dock = undefined
+    for (const entry of this.#gallery) URL.revokeObjectURL(entry.url)
+    this.#gallery = []
     this.#wallpaperHost?.remove()
     this.#wallpaperHost = undefined
     this.#wallpaper = undefined

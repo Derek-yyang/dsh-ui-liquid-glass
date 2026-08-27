@@ -7,9 +7,10 @@ import { useRef, useState, type ReactNode } from 'react'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { WallpaperPreset } from '../tokens.ts'
+import { WALLPAPER_PRESETS, type WallpaperPreset } from '../tokens.ts'
 import { GLASS_LOOKS } from '../look.ts'
 import type { GlassLookId, NamedGlassLook } from '../look.ts'
+import { customPresetId, galleryIdFromPreset } from './wallpaper-store.ts'
 import type { LiquidGlassSnapshot } from './controller.ts'
 import type { LiquidGlassLocaleKey } from './locales.ts'
 import css from './glass.module.css'
@@ -30,8 +31,10 @@ export interface LiquidGlassSettingsCardInjected {
   setClarity(percent: number): void
   /** Apply a named look calibration. */
   setLook(id: NamedGlassLook): void
-  /** Persist an uploaded image and make it the active preset. */
+  /** Persist an uploaded image, append it to the gallery, and make it active. */
   uploadCustom(image: File): Promise<void>
+  /** Remove one custom image from this device. */
+  removeCustom(id: string): Promise<void>
 }
 
 /** Full component props assembled by the Settings slot renderer. */
@@ -42,12 +45,12 @@ export type LiquidGlassSettingsCardProps =
 
 /** Built-in presets; the custom entry appears in the menu only when an image
  * has been uploaded on this device. */
-const PRESETS: readonly { id: WallpaperPreset; label: LiquidGlassLocaleKey }[] = [
-  { id: 'ridge', label: 'presetRidge' },
-  { id: 'coast', label: 'presetCoast' },
-  { id: 'garden', label: 'presetGarden' },
-  { id: 'arch', label: 'presetArch' },
-]
+const PRESET_LABEL: Record<(typeof WALLPAPER_PRESETS)[number], LiquidGlassLocaleKey> = {
+  ridge: 'presetRidge',
+  coast: 'presetCoast',
+  garden: 'presetGarden',
+  arch: 'presetArch',
+}
 
 const LOOK_LABEL: Record<GlassLookId, LiquidGlassLocaleKey> = {
   restrained: 'lookRestrained',
@@ -62,22 +65,13 @@ const LOOK_LABEL: Record<GlassLookId, LiquidGlassLocaleKey> = {
  */
 export function LiquidGlassSettingsCard(
   {
-    useSnapshot, setEnabled, setPreset, setVeil, setClarity, setLook, uploadCustom, t,
+    useSnapshot, setEnabled, setPreset, setVeil, setClarity, setLook, uploadCustom, removeCustom, t,
   }: LiquidGlassSettingsCardProps,
 ): ReactNode {
   const snapshot = useSnapshot(value => value)
   const [open, setOpen] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [lookMenuOpen, setLookMenuOpen] = useState(false)
   const fileInput = useRef<HTMLInputElement | null>(null)
-  const presetLabel = (id: WallpaperPreset): LiquidGlassLocaleKey => {
-    if (id === 'custom') return 'presetCustom'
-    return PRESETS.find(preset => preset.id === id)?.label ?? 'presetRidge'
-  }
-  const menuItems = [
-    ...PRESETS.map(preset => ({ id: preset.id, label: t(preset.label) })),
-    ...(snapshot.custom ? [{ id: 'custom' as WallpaperPreset, label: t('presetCustom') }] : []),
-  ]
   const lookItems = [
     ...GLASS_LOOKS.map(id => ({ id, label: t(LOOK_LABEL[id]) })),
     ...(snapshot.look === 'custom' ? [{ id: 'custom' as GlassLookId, label: t('lookCustom') }] : []),
@@ -165,63 +159,68 @@ export function LiquidGlassSettingsCard(
                 )}
               />
             </div>
-            <div className={css.settingsRow}>
-              <div className={css.settingsRowText}>
-                <div className={css.settingsRowTitle}>{t('presetTitle')}</div>
-                <div className={css.settingsRowDesc}>{t('presetDescription')}</div>
-              </div>
-              <Menu
-                open={menuOpen}
-                onClose={() => { setMenuOpen(false) }}
-                items={menuItems}
-                selectedId={snapshot.preset}
-                onSelect={(id) => {
-                  setMenuOpen(false)
-                  setPreset(id as WallpaperPreset)
-                }}
-                align="end"
-                side="top"
-                portal
-                anchor={(
+            <div>
+              <div className={css.settingsRowTitle}>{t('presetTitle')}</div>
+              <div className={css.settingsRowDesc}>{t('presetDescription')}</div>
+              <div className={css.gallery}>
+                {WALLPAPER_PRESETS.map((id) => (
                   <button
+                    key={id}
                     type="button"
-                    className={css.settingsSelector}
-                    aria-haspopup="menu"
-                    aria-expanded={menuOpen}
-                    onClick={() => { setMenuOpen(value => !value) }}
+                    className={`${css.galleryTile} ${css[id]} ${snapshot.preset === id ? css.gallerySelected : ''}`}
+                    aria-pressed={snapshot.preset === id}
+                    onClick={() => { setPreset(id) }}
                   >
-                    {t(presetLabel(snapshot.preset))}
-                    <IconChevronDownOutline14 size={12} aria-hidden="true" />
+                    <span className={css.galleryCaption}>{t(PRESET_LABEL[id])}</span>
                   </button>
-                )}
-              />
-            </div>
-            <div className={css.settingsRow}>
-              <div className={css.settingsRowText}>
-                <div className={css.settingsRowTitle}>{t('customTitle')}</div>
-                <div className={css.settingsRowDesc}>{t('customDescription')}</div>
+                ))}
+                {snapshot.gallery.map((entry, index) => {
+                  const preset = customPresetId(entry.id)
+                  return (
+                    <div key={entry.id} className={`${css.galleryTile} ${snapshot.preset === preset ? css.gallerySelected : ''}`}>
+                      <button
+                        type="button"
+                        className={css.galleryThumb}
+                        aria-pressed={snapshot.preset === preset}
+                        style={{ backgroundImage: `url("${entry.url}")` }}
+                        onClick={() => { setPreset(preset) }}
+                      >
+                        <span className={css.galleryCaption}>{t('presetCustom')} {index + 1}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={css.galleryDelete}
+                        aria-label={t('deleteCustom')}
+                        onClick={() => { void removeCustom(entry.id) }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )
+                })}
+                <button
+                  type="button"
+                  className={`${css.galleryTile} ${css.galleryAdd}`}
+                  onClick={() => { fileInput.current?.click() }}
+                >
+                  <span className={css.galleryAddMark}>+</span>
+                  <span>{t('upload')}</span>
+                </button>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={() => {
+                    const input = fileInput.current
+                    const file = input?.files?.[0]
+                    if (file !== undefined) void uploadCustom(file)
+                    if (input !== null) input.value = ''
+                  }}
+                />
               </div>
-              <button
-                type="button"
-                className={css.settingsSelector}
-                onClick={() => { fileInput.current?.click() }}
-              >
-                {t('upload')}
-              </button>
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={() => {
-                  const input = fileInput.current
-                  const file = input?.files?.[0]
-                  if (file !== undefined) void uploadCustom(file)
-                  if (input !== null) input.value = ''
-                }}
-              />
             </div>
-            {snapshot.preset === 'custom' && (
+            {galleryIdFromPreset(snapshot.preset) !== undefined && (
               <div className={css.settingsRow}>
                 <div className={css.settingsRowText}>
                   <div className={css.settingsRowTitle}>{t('veilTitle')}</div>

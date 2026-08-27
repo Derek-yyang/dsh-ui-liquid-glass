@@ -55,6 +55,7 @@ export function apply(ctx: ClientContext): void {
     setClarity: (percent) => { controller.setClarity(percent) },
     setLook: (id) => { controller.setLook(id) },
     uploadCustom: image => controller.uploadCustomWallpaper(image),
+    removeCustom: id => controller.removeCustomWallpaper(id),
   })
 
   // The configurable-plugins tab owns the card slot and loads dynamically

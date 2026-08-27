@@ -26,7 +26,7 @@ export const WALLPAPER_PRESETS = ['ridge', 'coast', 'garden', 'arch'] as const
  * IndexedDB (device-local — the Host namespace only stores the id); it never
  * enters the dock's cycle, because cycling onto it without an uploaded image
  * would just fall back. `collage` is a retired Host id that paints as `ridge`. */
-export type WallpaperPreset = (typeof WALLPAPER_PRESETS)[number] | 'custom' | 'collage'
+export type WallpaperPreset = (typeof WALLPAPER_PRESETS)[number] | 'custom' | 'collage' | `c_${string}`
 
 /** DOM marker of the plugin-owned wallpaper layer (the refraction source). */
 export const WALLPAPER_SELECTOR = '[data-dsh-liquid-glass-wallpaper]'

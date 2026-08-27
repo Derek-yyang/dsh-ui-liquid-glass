@@ -37,7 +37,7 @@ function hostSection(
 
 function published(partial: Partial<LiquidGlassSnapshot> & Pick<LiquidGlassSnapshot, 'enabled' | 'preset'>): LiquidGlassSnapshot {
   return {
-    custom: false, veil: 100, clarity: 0, look: DEFAULT_LOOK, lookValues: { ...RICH }, ...partial,
+    gallery: [], veil: 100, clarity: 0, look: DEFAULT_LOOK, lookValues: { ...RICH }, ...partial,
   }
 }
 

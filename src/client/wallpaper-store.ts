@@ -1,54 +1,118 @@
-/** Device-local persistence for the custom wallpaper image. IndexedDB because
+/** Device-local persistence for custom wallpaper images. IndexedDB because
  * images dwarf what localStorage or the Host settings document should carry;
  * being device-local is the accepted trade (the Host namespace stores only
- * the preset id). Every operation degrades to a no-op on failure — private
- * mode or blocked storage loses the image, never breaks the page. */
+ * the preset id). Every read degrades to empty on failure — private mode or
+ * blocked storage loses the images, never breaks the page. */
 
 const DB_NAME = 'dsh-ui-liquid-glass'
-const DB_VERSION = 1
-const STORE = 'wallpaper'
-const KEY = 'custom'
+const DB_VERSION = 2
+const LEGACY_STORE = 'wallpaper'
+const LEGACY_KEY = 'custom'
+const STORE = 'gallery'
+
+/** One custom wallpaper stored on this device. */
+export interface GalleryRecord {
+  /** Opaque id used in the Host preset field as `c_<id>`. */
+  id: string
+  /** Image bytes. */
+  blob: Blob
+  /** Upload time, milliseconds since epoch; gallery order is oldest first. */
+  createdAt: number
+}
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const open = indexedDB.open(DB_NAME, DB_VERSION)
-    open.onupgradeneeded = () => {
-      if (!open.result.objectStoreNames.contains(STORE)) open.result.createObjectStore(STORE)
+    open.onupgradeneeded = (event) => {
+      const db = open.result
+      const tx = open.transaction
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' })
+      if (event.oldVersion < 2 && tx !== null && db.objectStoreNames.contains(LEGACY_STORE)) {
+        const legacy = tx.objectStore(LEGACY_STORE)
+        const gallery = tx.objectStore(STORE)
+        const get = legacy.get(LEGACY_KEY)
+        get.onsuccess = () => {
+          const blob = get.result
+          if (!(blob instanceof Blob)) return
+          gallery.put({ id: 'legacy', blob, createdAt: 0 })
+        }
+      }
     }
     open.onsuccess = () => { resolve(open.result) }
     open.onerror = () => { reject(open.error ?? new Error('indexedDB.open failed')) }
   })
 }
 
-function request<T>(request: IDBRequest<T>): Promise<T> {
+function request<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
-    request.onsuccess = () => { resolve(request.result) }
-    request.onerror = () => { reject(request.error ?? new Error('indexedDB request failed')) }
+    req.onsuccess = () => { resolve(req.result) }
+    req.onerror = () => { reject(req.error ?? new Error('indexedDB request failed')) }
   })
 }
 
+/** Mint a short id safe in a Host preset string. */
+function mintId(): string {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+}
+
 /**
- * Read the stored custom image; undefined when none or storage unavailable.
- * @returns the stored image blob, or undefined when none was ever uploaded.
+ * Load every custom wallpaper, oldest first. Empty when none or storage fails.
+ * @returns the gallery records.
  */
-export async function loadCustomWallpaper(): Promise<Blob | undefined> {
+export async function loadGallery(): Promise<GalleryRecord[]> {
   try {
     const db = await openDb()
     const store = db.transaction(STORE).objectStore(STORE)
-    return await request<Blob | undefined>(store.get(KEY))
+    const rows = await request<GalleryRecord[]>(store.getAll())
+    db.close()
+    return [...rows].sort((a, b) => a.createdAt - b.createdAt)
   } catch {
-    return undefined
+    return []
   }
 }
 
 /**
- * Persist the custom image, replacing any previous one.
+ * Persist a new custom image and return its record.
  * @param blob - the image bytes to store.
- * @returns resolves once the blob is written.
+ * @returns the stored record.
  */
-export async function saveCustomWallpaper(blob: Blob): Promise<void> {
+export async function addGalleryImage(blob: Blob): Promise<GalleryRecord> {
+  const record: GalleryRecord = { id: mintId(), blob, createdAt: Date.now() }
   const db = await openDb()
   const store = db.transaction(STORE, 'readwrite').objectStore(STORE)
-  await request(store.put(blob, KEY))
+  await request(store.put(record))
   db.close()
+  return record
+}
+
+/**
+ * Delete one custom image.
+ * @param id - gallery record id.
+ * @returns resolves once the record is gone (or was already absent).
+ */
+export async function removeGalleryImage(id: string): Promise<void> {
+  const db = await openDb()
+  const store = db.transaction(STORE, 'readwrite').objectStore(STORE)
+  await request(store.delete(id))
+  db.close()
+}
+
+/**
+ * Host preset id for a gallery record.
+ * @param id - gallery record id.
+ * @returns the preset string stored in the Host document.
+ */
+export function customPresetId(id: string): `c_${string}` {
+  return `c_${id}`
+}
+
+/**
+ * Parse a Host preset id that names a gallery record.
+ * @param preset - Host preset field.
+ * @returns the gallery id, or undefined when the preset is not a custom tile.
+ */
+export function galleryIdFromPreset(preset: string): string | undefined {
+  if (preset === 'custom') return 'legacy'
+  if (preset.startsWith('c_')) return preset.slice(2)
+  return undefined
 }
