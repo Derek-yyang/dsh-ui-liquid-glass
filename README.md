@@ -6,13 +6,17 @@ A third-party UI theme plugin for [DeepSeek Harness](https://github.com/deepseek
 
 ## Install
 
-Requires a running `dsh web` (developed against dsh `0.1.1-rc.2`). Install the package into your profile and register one insert row:
+Requires a running dsh web (developed against dsh `0.1.1-rc.2`). Use a dedicated profile so the stock `web` profile stays untouched:
 
 ```sh
-dsh plugin --profile web add file:/path/to/this/repo        # or an npm spec once published
+git clone https://github.com/Derek-yyang/dsh-ui-liquid-glass.git
+cd dsh-ui-liquid-glass
+pnpm install
+pnpm run build
+dsh plugin --profile glass add file:$PWD
 ```
 
-Then add to `$DSH_HOME/profiles/web/cordis.patch.yml`:
+Then add to `$DSH_HOME/profiles/glass/cordis.patch.yml`:
 
 ```yaml
 - insert:
@@ -20,7 +24,7 @@ Then add to `$DSH_HOME/profiles/web/cordis.patch.yml`:
       name: dsh-ui-liquid-glass
 ```
 
-Restart `dsh web`; the dock button appears bottom-right. The toggle, preset, and clarity choices persist in Host settings.
+Start with `dsh --profile glass`. The droplet appears bottom-right. Click toggles the theme, long-press cycles wallpapers, right-click opens look and clarity knobs. Preferences persist in Host settings; custom images stay in this browser.
 
 ## Development
 

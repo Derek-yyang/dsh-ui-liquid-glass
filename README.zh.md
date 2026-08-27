@@ -6,13 +6,17 @@
 
 ## 安装
 
-需要可运行的 `dsh web`（针对 dsh `0.1.1-rc.2` 开发）。把包装进 profile 并注册一行 insert：
+需要可运行的 dsh web（针对 dsh `0.1.1-rc.2` 开发）。用独立 profile，不要改官方 `web`：
 
 ```sh
-dsh plugin --profile web add file:/path/to/this/repo        # 发布后也可以用 npm spec
+git clone https://github.com/Derek-yyang/dsh-ui-liquid-glass.git
+cd dsh-ui-liquid-glass
+pnpm install
+pnpm run build
+dsh plugin --profile glass add file:$PWD
 ```
 
-再在 `$DSH_HOME/profiles/web/cordis.patch.yml` 里加：
+再在 `$DSH_HOME/profiles/glass/cordis.patch.yml` 里加：
 
 ```yaml
 - insert:
@@ -20,7 +24,7 @@ dsh plugin --profile web add file:/path/to/this/repo        # 发布后也可以
       name: dsh-ui-liquid-glass
 ```
 
-重启 `dsh web`，右下角出现水滴按钮；开关、预设与通透度的选择都会持久化到 Host 设置。
+用 `dsh --profile glass` 启动。右下角出现水滴：单击开关，长按切壁纸，右键打开观感与通透度。偏好写入 Host 设置；自定义图只留在此浏览器。
 
 ## 开发
 
