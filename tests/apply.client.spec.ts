@@ -66,6 +66,21 @@ describe('ui-liquid-glass apply', () => {
     }
   })
 
+  it('a locale/change event rewrites dock and popover copy', async () => {
+    const { ctx } = await bench()
+    ctx.locale.setLocale('en')
+    const dock = document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement
+    expect(dock.getAttribute('aria-label')).toBe('Toggle liquid glass')
+    dock.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    expect(document.querySelector('[data-dsh-liquid-glass-tuning]')?.textContent).toContain('Fine-tune glass')
+    ctx.locale.setLocale('zh')
+    expect(dock.getAttribute('aria-label')).toBe('切换液态玻璃效果')
+    const panel = document.querySelector('[data-dsh-liquid-glass-tuning]')
+    expect(panel?.textContent).toContain('微调玻璃')
+    expect(panel?.querySelector('input[data-knob="refraction"]')).not.toBeNull()
+    await ctx.fiber.dispose()
+  })
+
   it('disposing the fiber unmounts the surfaces and disposes the override layer', async () => {
     const { ctx, disposeLayer } = await bench()
     await ctx.fiber.dispose()

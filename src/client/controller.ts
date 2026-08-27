@@ -11,14 +11,15 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
 import css from './glass.module.css'
 import {
-  addGalleryImage, customPresetId, galleryIdFromPreset, loadGallery, removeGalleryImage,
+  addGalleryImage, customPresetId, galleryIdFromPreset, loadGallery, nextWallpaperPreset, removeGalleryImage,
 } from './wallpaper-store.ts'
 import type { GalleryRecord } from './wallpaper-store.ts'
+import { zh, type LiquidGlassLocaleKey } from './locales.ts'
 import {
   CLARITY_DEFAULT_PERCENT, COMPOSER_SELECTOR, GLASS_MARKER, LIQUID_GLASS_TOKENS,
   MODAL_PANEL_SELECTOR, PACKAGE_ID, SCROLL_SELECTOR, SEAT_SELECTOR,
-  PORTAL_MENU_SELECTOR, SETTINGS_DIALOG_SELECTOR, SIDEBAR_SELECTOR, VEIL_DEFAULT_PERCENT, VEIL_VAR, WALLPAPER_CROSSFADE_MS,
-  WALLPAPER_PRESETS, WALLPAPER_SELECTOR,
+  PORTAL_MENU_SELECTOR, SETTINGS_DIALOG_SELECTOR, SIDEBAR_SELECTOR, WALLPAPER_CROSSFADE_MS,
+  WALLPAPER_SELECTOR,
 } from '../tokens.ts'
 import { scaleSurfaceTokens } from '../tokens.ts'
 import type { WallpaperPreset } from '../tokens.ts'
@@ -40,19 +41,19 @@ const GL_FIXED = {
 
 const DEFAULT_LOOK_VALUES: GlassLookValues = GLASS_LOOK_PRESETS[DEFAULT_LOOK]
 
-const KNOB_LABEL_ZH: Record<(typeof GLASS_LOOK_SLIDER_KEYS)[number], string> = {
-  refraction: '折射',
-  bevelDepth: '斜边深',
-  bevelWidth: '斜边宽',
-  frost: '磨砂',
-  aberration: '色散',
-  magnify: '放大',
+const KNOB_COPY: Record<(typeof GLASS_LOOK_SLIDER_KEYS)[number], LiquidGlassLocaleKey> = {
+  refraction: 'knobRefraction',
+  bevelDepth: 'knobBevelDepth',
+  bevelWidth: 'knobBevelWidth',
+  frost: 'knobFrost',
+  aberration: 'knobAberration',
+  magnify: 'knobMagnify',
 }
 
-const LOOK_LABEL_ZH: Record<(typeof GLASS_LOOKS)[number], string> = {
-  restrained: '克制',
-  standard: '标准',
-  rich: '浓郁',
+const LOOK_COPY: Record<(typeof GLASS_LOOKS)[number], LiquidGlassLocaleKey> = {
+  restrained: 'lookRestrained',
+  standard: 'lookStandard',
+  rich: 'lookRich',
 }
 
 /** Format a look-knob number for the popover readout. */
@@ -81,9 +82,9 @@ const PARALLAX_HEADROOM_VH = 120
  * toggling the theme; a shorter press keeps the toggle. */
 const LONG_PRESS_MS = 450
 
-/** The veil and clarity sliders fire an input event per drag tick; the Host
- * document write trails the last one so the wire sees one commit per gesture.
- * The local surfaces apply immediately either way. */
+/** The clarity slider fires an input event per drag tick; the Host document
+ * write trails the last one so the wire sees one commit per gesture. The
+ * local surfaces apply immediately either way. */
 const SLIDER_WRITE_DEBOUNCE_MS = 250
 
 /** Preset id → CSS module class carrying the preset's paint. */
@@ -152,9 +153,6 @@ export interface LiquidGlassSnapshot {
   preset: WallpaperPreset
   /** Object URLs of custom images on this device, oldest first. */
   gallery: readonly { id: string; url: string }[]
-  /** Custom-image veil strength in percent (0–100); 100 is the shipped
-   * calibration, 0 shows the raw image. */
-  veil: number
   /** Surface clarity in percent (0–100); 0 is the shipped calibration, 100
    * fades static surface fills to transparent over the wallpaper. */
   clarity: number
@@ -172,14 +170,13 @@ export interface LiquidGlassSnapshot {
  * and writes stay session-local. */
 export class LiquidGlassController {
   readonly #theme: ThemeRuntime
+  #copy: (key: LiquidGlassLocaleKey) => string
   /** Live user-visible state; the Settings card subscribes through the inject
    * hooks compartment so dock clicks and Settings writes stay in sync. */
   readonly snapshot: SnapshotStore<LiquidGlassSnapshot>
   #scope: SettingsScope<LiquidGlassHostSection> | undefined
   #enabled = true
   #preset: WallpaperPreset = 'ridge'
-  /** Custom-image veil strength in percent (0–100). */
-  #veil = VEIL_DEFAULT_PERCENT
   /** Surface clarity in percent (0–100): 0 is the shipped calibration, 100
    * fades static surface fills to transparent. */
   #clarity = CLARITY_DEFAULT_PERCENT
@@ -204,13 +201,14 @@ export class LiquidGlassController {
   #savedCardStyle: string | null | undefined
   #lensCard: HTMLElement | undefined
   #observer: MutationObserver | undefined
+  /** True while a settings dialog is covering the page; the lens parks then. */
+  #dialogOpen = false
   #disposeLayer: (() => void) | undefined
   #scrollListener: ((event: Event) => void) | undefined
   #scrollPort: Element | undefined
   #parallaxAnchor: number | undefined
   #pressTimer: ReturnType<typeof setTimeout> | undefined
   #longPressed = false
-  #veilWriteTimer: ReturnType<typeof setTimeout> | undefined
   #clarityWriteTimer: ReturnType<typeof setTimeout> | undefined
   #lookWriteTimer: ReturnType<typeof setTimeout> | undefined
   #crossfadeTimer: ReturnType<typeof setTimeout> | undefined
@@ -219,10 +217,19 @@ export class LiquidGlassController {
   #pendingRevoke: string | undefined
   #removed = false
 
-  constructor(theme: ThemeRuntime) {
+  /**
+   * @param theme - the ui-theme service used to register the override layer.
+   * @param copy - translator for dock and popover chrome; defaults to Chinese so
+   * unit tests that construct the controller directly still have labels.
+   */
+  constructor(
+    theme: ThemeRuntime,
+    copy: (key: LiquidGlassLocaleKey) => string = (key) => zh[key],
+  ) {
     this.#theme = theme
+    this.#copy = copy
     this.snapshot = createSnapshotStore({
-      enabled: this.#enabled, preset: this.#preset, gallery: [], veil: this.#veil, clarity: this.#clarity,
+      enabled: this.#enabled, preset: this.#preset, gallery: [], clarity: this.#clarity,
       look: DEFAULT_LOOK, lookValues: { ...this.#look },
     })
   }
@@ -292,7 +299,6 @@ export class LiquidGlassController {
     this.#setState({
       enabled: value.enabled,
       preset: value.preset as WallpaperPreset,
-      veil: value.veil,
       clarity: value.clarity,
       look: {
         refraction: value.refraction,
@@ -308,11 +314,10 @@ export class LiquidGlassController {
   }
 
   /** The single state transition: applies surface diffs, publishes, and is
-   * the only place enabled/preset/veil/clarity/look change. */
+   * the only place enabled/preset/clarity/look change. */
   #setState(next: {
     enabled: boolean
     preset: WallpaperPreset
-    veil: number
     clarity: number
     look: GlassLookValues
   }): void {
@@ -320,10 +325,6 @@ export class LiquidGlassController {
     if (next.preset !== this.#preset) {
       this.#preset = next.preset
       if (this.#wallpaper !== undefined) this.#crossfadeWallpaper()
-    }
-    if (next.veil !== this.#veil) {
-      this.#veil = next.veil
-      if (this.#wallpaper !== undefined) this.#applyVeil(this.#wallpaper)
     }
     if (next.clarity !== this.#clarity) {
       this.#clarity = next.clarity
@@ -345,7 +346,6 @@ export class LiquidGlassController {
       enabled: this.#enabled,
       preset: this.#preset,
       gallery: this.#gallery.map(entry => ({ id: entry.id, url: entry.url })),
-      veil: this.#veil,
       clarity: this.#clarity,
       look: lookIdFor(this.#look),
       lookValues: { ...this.#look },
@@ -369,7 +369,7 @@ export class LiquidGlassController {
    */
   setEnabled(enabled: boolean): void {
     if (this.#enabled === enabled) return
-    this.#setState({ enabled, preset: this.#preset, veil: this.#veil, clarity: this.#clarity, look: this.#look })
+    this.#setState({ enabled, preset: this.#preset, clarity: this.#clarity, look: this.#look })
     void this.#scope?.set('enabled', enabled)
   }
 
@@ -381,37 +381,19 @@ export class LiquidGlassController {
    */
   setPreset(preset: WallpaperPreset): void {
     if (this.#preset === preset) return
-    this.#setState({ enabled: this.#enabled, preset, veil: this.#veil, clarity: this.#clarity, look: this.#look })
+    this.#setState({ enabled: this.#enabled, preset, clarity: this.#clarity, look: this.#look })
     void this.#scope?.set('preset', preset)
   }
 
   /**
-   * Scale the custom-image veil from outside (Settings card slider). The
-   * surface applies immediately; the Host document write trails the gesture
-   * (see `SLIDER_WRITE_DEBOUNCE_MS`). No-op when the state already holds the
-   * value.
-   * @param percent - veil strength in percent (0–100).
-   * @returns nothing; the write queues debounced through the attached scope.
-   */
-  setVeil(percent: number): void {
-    if (this.#veil === percent) return
-    this.#setState({ enabled: this.#enabled, preset: this.#preset, veil: percent, clarity: this.#clarity, look: this.#look })
-    clearTimeout(this.#veilWriteTimer)
-    this.#veilWriteTimer = setTimeout(() => {
-      this.#veilWriteTimer = undefined
-      void this.#scope?.set('veil', this.#veil)
-    }, SLIDER_WRITE_DEBOUNCE_MS)
-  }
-
-  /**
-   * Scale the glass surface tint from outside (Settings card slider). Same
-   * shape as `setVeil`: immediate re-registration, debounced Host write.
+   * Scale the glass surface tint from outside (Settings card slider). Immediate
+   * re-registration, debounced Host write.
    * @param percent - surface clarity in percent (0–100).
    * @returns nothing; the write queues debounced through the attached scope.
    */
   setClarity(percent: number): void {
     if (this.#clarity === percent) return
-    this.#setState({ enabled: this.#enabled, preset: this.#preset, veil: this.#veil, clarity: percent, look: this.#look })
+    this.#setState({ enabled: this.#enabled, preset: this.#preset, clarity: percent, look: this.#look })
     clearTimeout(this.#clarityWriteTimer)
     this.#clarityWriteTimer = setTimeout(() => {
       this.#clarityWriteTimer = undefined
@@ -438,8 +420,13 @@ export class LiquidGlassController {
   setLookValues(values: GlassLookValues): void {
     if (sameLook(values, this.#look)) return
     this.#setState({
-      enabled: this.#enabled, preset: this.#preset, veil: this.#veil, clarity: this.#clarity, look: values,
+      enabled: this.#enabled, preset: this.#preset, clarity: this.#clarity, look: values,
     })
+    // Invalidate in-flight Host echoes immediately. Generation used to bump
+    // only when `#persistLook` started, so a second click during the first
+    // persist's Promise.all let that finally `#adopt` a half-written bag and
+    // the sliders jumped.
+    this.#lookWriteGeneration += 1
     clearTimeout(this.#lookWriteTimer)
     this.#lookWriteTimer = setTimeout(() => {
       this.#lookWriteTimer = undefined
@@ -450,14 +437,18 @@ export class LiquidGlassController {
   /** Persist every look knob through the attached scope. */
   #persistLook(): void {
     const scope = this.#scope
-    if (scope === undefined) return
-    const generation = ++this.#lookWriteGeneration
+    const generation = this.#lookWriteGeneration
+    if (scope === undefined) {
+      this.#lookWriteGeneration = 0
+      return
+    }
     const snapshot = { ...this.#look }
     const writes = LOOK_KEYS.map(key => scope.set(key, snapshot[key]))
     void Promise.all(writes).finally(() => {
       if (generation !== this.#lookWriteGeneration) return
       this.#lookWriteGeneration = 0
-      this.#adopt()
+      // Local look is already the bag we wrote; adopting here would paint
+      // whatever the Host last republished, which can still be mid-batch.
     })
   }
 
@@ -483,6 +474,21 @@ export class LiquidGlassController {
   }
 
   /**
+   * Refresh dock and popover copy after the active locale switches. Dictionary
+   * registrations do not call this — they bump LocaleFace revision for React
+   * outlets, but this chrome is controller-owned DOM.
+   */
+  onLocaleChange(): void {
+    if (this.#dock !== undefined) {
+      this.#dock.setAttribute('aria-label', this.#copy('dockAria'))
+      this.#dock.title = this.#copy('dockTitle')
+    }
+    if (this.#tuning === undefined) return
+    this.#tuning.replaceChildren()
+    this.#syncTuningPanel()
+  }
+
+  /**
    * Mount every surface for the controller's lifetime.
    * @returns the disposer that tears the dock, wallpaper, token layer, rules,
    * listeners, and observer down.
@@ -492,8 +498,8 @@ export class LiquidGlassController {
     this.#dock.type = 'button'
     this.#dock.className = css.dock
     this.#dock.dataset.dshLiquidGlassDock = ''
-    this.#dock.setAttribute('aria-label', '切换液态玻璃效果')
-    this.#dock.title = '液态玻璃效果（长按切换壁纸，右键微调）'
+    this.#dock.setAttribute('aria-label', this.#copy('dockAria'))
+    this.#dock.title = this.#copy('dockTitle')
     this.#dock.append(dropletIcon())
     this.#dock.addEventListener('contextmenu', (event) => {
       event.preventDefault()
@@ -526,6 +532,7 @@ export class LiquidGlassController {
     // card is still connected, so streaming renders cost one property read.
     this.#observer = new MutationObserver(() => {
       if (this.#enabled) this.#attachCard()
+      this.#syncDialogPark()
     })
     this.#observer.observe(document.body, { childList: true, subtree: true })
     this.#apply(this.#enabled)
@@ -540,7 +547,9 @@ export class LiquidGlassController {
       this.#ensureOverlayRules()
       this.#registerLayer()
       this.#attachCard()
-      this.#resumeRenderer()
+      this.#dialogOpen = document.querySelector(SETTINGS_DIALOG_SELECTOR) !== null
+      if (this.#dialogOpen) this.#suspendRenderer()
+      else this.#resumeRenderer()
       this.#ensureScrollSync()
     } else {
       this.#teardownScrollSync()
@@ -648,7 +657,6 @@ export class LiquidGlassController {
     const custom = galleryId === undefined ? undefined : this.#gallery.find(entry => entry.id === galleryId)
     const preset = custom === undefined ? resolveWallpaperPreset(this.#preset) : 'custom'
     wallpaper.className = `${css.wallpaper} ${WALLPAPER_CLASSES[preset === 'custom' ? 'custom' : preset]}`
-    this.#applyVeil(wallpaper)
     if (custom !== undefined) {
       wallpaper.style.setProperty('--dsh-liquid-glass-custom-image', `url("${custom.url}")`)
     } else {
@@ -656,20 +664,11 @@ export class LiquidGlassController {
     }
   }
 
-  /** Carry the current veil strength onto the wallpaper; only the custom
-   * preset's gradient reads the variable, the others ignore it. */
-  #applyVeil(wallpaper: HTMLElement): void {
-    wallpaper.style.setProperty(VEIL_VAR, String(this.#veil / 100))
-  }
-
-  /** Advance to the next preset — the dock's write path with wrap around;
-   * the crossfade, recapture, and publish happen in `setPreset`. Cycling walks the
-   * built-in presets only: landing on `custom` without an uploaded image
-   * would fall straight back. */
+  /** Advance to the next wallpaper in the gallery ring: built-ins, then every
+   * device-local custom image. Crossfade, recapture, and publish happen in
+   * `setPreset`. */
   #cycleWallpaper(): void {
-    const index = WALLPAPER_PRESETS.indexOf(this.#preset as (typeof WALLPAPER_PRESETS)[number])
-    const next = WALLPAPER_PRESETS[(index + 1) % WALLPAPER_PRESETS.length] ?? WALLPAPER_PRESETS[0]
-    this.setPreset(next)
+    this.setPreset(nextWallpaperPreset(this.#preset, this.#gallery.map(entry => entry.id)))
   }
 
   /** Size the wallpaper as a canvas taller than the viewport by the parallax
@@ -751,12 +750,18 @@ export class LiquidGlassController {
       `${SEAT_SELECTOR}{position:relative;z-index:7}`,
       `${SIDEBAR_SELECTOR}{backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}`,
       `${MODAL_PANEL_SELECTOR}{backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}`,
+      // The settings panel is already opaque: frost on it is a full-viewport
+      // GPU pass that hitch hover/click with nothing to show for it.
+      `${SETTINGS_DIALOG_SELECTOR}{backdrop-filter:none;-webkit-backdrop-filter:none}`,
       // Settings is a reading surface over dense transcript text: keep the
       // frost, but restore an opaque fill so the global clarity slider cannot
       // punch the conversation through the panel. Light/dark keyed off the
       // same body marker the wallpaper presets use.
-      `${SETTINGS_DIALOG_SELECTOR}{background:#fff}`,
-      `body[data-ds-dark-theme] ${SETTINGS_DIALOG_SELECTOR}{background:#1c1e24}`,
+      // Opaque reading fill, plus ink-on-paper hover/active on this node only:
+      // the global glass nav tokens are white, which vanishes on #fff.
+      `${SETTINGS_DIALOG_SELECTOR}{background:#fff;--dsw-specific-sidebar-nav-item-hover:rgba(15,17,21,0.06);--dsw-specific-sidebar-nav-item-active:rgba(15,17,21,0.10)}`,
+      `${SETTINGS_DIALOG_SELECTOR} button{transition:background-color 120ms ease}`,
+      `body[data-ds-dark-theme] ${SETTINGS_DIALOG_SELECTOR}{background:#1c1e24;--dsw-specific-sidebar-nav-item-hover:rgba(255,255,255,0.07);--dsw-specific-sidebar-nav-item-active:rgba(255,255,255,0.10)}`,
       `${PORTAL_MENU_SELECTOR}{background:#fff}`,
       `body[data-ds-dark-theme] ${PORTAL_MENU_SELECTOR}{background:#1c1e24}`,
     ].join('')
@@ -860,6 +865,17 @@ export class LiquidGlassController {
     for (const lens of renderer.lenses) lens.setShadow(false)
   }
 
+  /** Park the lens while a settings dialog covers the page. The composer is
+   * hidden behind an opaque panel, so a 2× wallpaper snapshot + rAF loop only
+   * fights the hover paint. Closing the dialog resumes if the theme is on. */
+  #syncDialogPark(): void {
+    const open = document.querySelector(SETTINGS_DIALOG_SELECTOR) !== null
+    if (open === this.#dialogOpen) return
+    this.#dialogOpen = open
+    if (open) this.#suspendRenderer()
+    else if (this.#enabled) this.#resumeRenderer()
+  }
+
   #resumeRenderer(): void {
     const renderer = rendererHandle()
     if (renderer === undefined) return
@@ -932,7 +948,7 @@ export class LiquidGlassController {
     if (panel === undefined) return
     if (panel.childElementCount === 0) this.#buildTuningPanel(panel)
     for (const key of GLASS_LOOK_SLIDER_KEYS) {
-      const input = panel.querySelector(`input[aria-label="${KNOB_LABEL_ZH[key]}"]`)
+      const input = panel.querySelector(`input[data-knob="${key}"]`)
       if (input instanceof HTMLInputElement && input !== document.activeElement) {
         input.value = String(this.#look[key])
       }
@@ -944,15 +960,21 @@ export class LiquidGlassController {
       const button = panel.querySelector(`button[data-look="${id}"]`)
       if (button instanceof HTMLButtonElement) button.setAttribute('aria-pressed', String(look === id))
     }
-    this.#syncTuningSwitch(panel, '投影', 'shadow')
-    this.#syncTuningSwitch(panel, '高光', 'specular')
+    this.#syncTuningSwitch(panel, this.#copy('knobShadow'), 'shadow')
+    this.#syncTuningSwitch(panel, this.#copy('knobSpecular'), 'specular')
+    const clarity = panel.querySelector('input[data-knob="clarity"]')
+    if (clarity instanceof HTMLInputElement && clarity !== document.activeElement) {
+      clarity.value = String(this.#clarity)
+    }
+    const clarityReadout = clarity?.parentElement?.querySelector(`.${css.settingsSliderValue}`)
+    if (clarityReadout instanceof HTMLElement) clarityReadout.textContent = `${this.#clarity}%`
   }
 
   /** Build the popover controls once. */
   #buildTuningPanel(panel: HTMLDivElement): void {
     const title = document.createElement('div')
     title.className = css.tuningTitle
-    title.textContent = '微调玻璃'
+    title.textContent = this.#copy('tuningTitle')
     panel.append(title)
     const looks = document.createElement('div')
     looks.className = css.tuningLooks
@@ -962,7 +984,7 @@ export class LiquidGlassController {
       button.type = 'button'
       button.className = css.tuningLook
       button.dataset.look = id
-      button.textContent = LOOK_LABEL_ZH[id]
+      button.textContent = this.#copy(LOOK_COPY[id])
       button.setAttribute('aria-pressed', String(current === id))
       button.addEventListener('click', () => { this.setLook(id) })
       looks.append(button)
@@ -974,7 +996,7 @@ export class LiquidGlassController {
       row.className = css.tuningRow
       const label = document.createElement('span')
       label.className = css.tuningLabel
-      label.textContent = KNOB_LABEL_ZH[key]
+      label.textContent = this.#copy(KNOB_COPY[key])
       const input = document.createElement('input')
       input.type = 'range'
       input.className = css.settingsSlider
@@ -982,7 +1004,8 @@ export class LiquidGlassController {
       input.max = String(spec.max)
       input.step = String(spec.step)
       input.value = String(this.#look[key])
-      input.setAttribute('aria-label', KNOB_LABEL_ZH[key])
+      input.dataset.knob = key
+      input.setAttribute('aria-label', this.#copy(KNOB_COPY[key]))
       const readout = document.createElement('span')
       readout.className = css.settingsSliderValue
       readout.textContent = formatKnob(this.#look[key])
@@ -992,9 +1015,34 @@ export class LiquidGlassController {
       row.append(label, input, readout)
       panel.append(row)
     }
+    const clarityRow = document.createElement('div')
+    clarityRow.className = css.tuningRow
+    const clarityLabel = document.createElement('span')
+    clarityLabel.className = css.tuningLabel
+    clarityLabel.textContent = this.#copy('clarityTitle')
+    const clarityInput = document.createElement('input')
+    clarityInput.type = 'range'
+    clarityInput.className = css.settingsSlider
+    clarityInput.min = '0'
+    clarityInput.max = '100'
+    clarityInput.step = '5'
+    clarityInput.value = String(this.#clarity)
+    clarityInput.dataset.knob = 'clarity'
+    clarityInput.setAttribute('aria-label', this.#copy('clarityTitle'))
+    const clarityReadout = document.createElement('span')
+    clarityReadout.className = css.settingsSliderValue
+    clarityReadout.textContent = `${this.#clarity}%`
+    clarityInput.addEventListener('input', () => {
+      this.setClarity(Number(clarityInput.value))
+    })
+    clarityRow.append(clarityLabel, clarityInput, clarityReadout)
+    panel.append(clarityRow)
     const switches = document.createElement('div')
     switches.className = css.tuningSwitches
-    switches.append(this.#tuningSwitch('投影', 'shadow'), this.#tuningSwitch('高光', 'specular'))
+    switches.append(
+      this.#tuningSwitch(this.#copy('knobShadow'), 'shadow'),
+      this.#tuningSwitch(this.#copy('knobSpecular'), 'specular'),
+    )
     panel.append(switches)
   }
 
@@ -1005,7 +1053,7 @@ export class LiquidGlassController {
       if (button.dataset.switch !== key) continue
       const on = this.#look[key]
       button.setAttribute('aria-pressed', String(on))
-      button.textContent = `${labelText} ${on ? '开' : '关'}`
+      button.textContent = `${labelText} ${on ? this.#copy('switchOn') : this.#copy('switchOff')}`
     }
   }
 
@@ -1017,7 +1065,7 @@ export class LiquidGlassController {
     button.dataset.switch = key
     const on = this.#look[key]
     button.setAttribute('aria-pressed', String(on))
-    button.textContent = `${labelText} ${on ? '开' : '关'}`
+    button.textContent = `${labelText} ${on ? this.#copy('switchOn') : this.#copy('switchOff')}`
     button.addEventListener('click', () => {
       this.setLookValues({ ...this.#look, [key]: !this.#look[key] })
     })
@@ -1029,8 +1077,8 @@ export class LiquidGlassController {
     this.#removed = true
     this.#observer?.disconnect()
     this.#observer = undefined
+    this.#dialogOpen = false
     clearTimeout(this.#pressTimer)
-    clearTimeout(this.#veilWriteTimer)
     clearTimeout(this.#clarityWriteTimer)
     clearTimeout(this.#lookWriteTimer)
     this.#abortCrossfade()

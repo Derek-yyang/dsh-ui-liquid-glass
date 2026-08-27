@@ -22,10 +22,11 @@ export const SETTINGS_NAMESPACE = 'liquid-glass'
  * to `ridge`. */
 export const WALLPAPER_PRESETS = ['ridge', 'coast', 'garden', 'arch'] as const
 
-/** All wallpaper preset ids. `custom` is a user-uploaded image persisted in
- * IndexedDB (device-local — the Host namespace only stores the id); it never
- * enters the dock's cycle, because cycling onto it without an uploaded image
- * would just fall back. `collage` is a retired Host id that paints as `ridge`. */
+/** All wallpaper preset ids. `custom` / `c_*` are user-uploaded images
+ * persisted in IndexedDB (device-local — the Host namespace only stores the
+ * id). The dock long-press walks built-ins then every loaded custom id;
+ * a `c_*` with no blob on this device paints as `ridge`. `collage` is a
+ * retired Host id that also paints as `ridge`. */
 export type WallpaperPreset = (typeof WALLPAPER_PRESETS)[number] | 'custom' | 'collage' | `c_${string}`
 
 /** DOM marker of the plugin-owned wallpaper layer (the refraction source). */
@@ -50,7 +51,9 @@ export const MODAL_PANEL_SELECTOR = '[data-modal-panel]'
 
 /** The settings shell dialog. Distinct from other `role=dialog` surfaces
  * (ui-primitives Modal is not `aria-modal`) so this plugin can give the
- * settings panel an opaque fill without changing global surface tokens. */
+ * settings panel an opaque fill without changing global surface tokens.
+ * Light hover/active nav fills are rebound on this node: the global glass
+ * tokens are white, which disappears on the restored white panel. */
 export const SETTINGS_DIALOG_SELECTOR = '[role="dialog"][aria-modal="true"]'
 
 /** Portal menus (`position: fixed` on body). Their `--dsw-specific-menu`
@@ -70,15 +73,6 @@ export const DOCK_SELECTOR = '[data-dsh-liquid-glass-dock]'
 
 /** DOM marker of the dock's right-click look-tuning popover. */
 export const TUNING_PANEL_SELECTOR = '[data-dsh-liquid-glass-tuning]'
-
-/** CSS custom property the controller drives with the custom-image veil
- * strength (0–1); the custom preset's gradient multiplies its stop alphas by
- * it, so 0 shows the raw image and the default 1 is the shipped calibration. */
-export const VEIL_VAR = '--dsh-liquid-glass-veil'
-
-/** Shipped veil strength, in percent — the default the slider and the Host
- * schema fall back to. */
-export const VEIL_DEFAULT_PERCENT = 100
 
 /** Shipped surface calibration, in percent — clarity 0. The slider and the
  * Host schema fall back to it. */

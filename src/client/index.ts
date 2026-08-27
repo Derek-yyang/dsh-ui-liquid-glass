@@ -40,19 +40,18 @@ export const inject = ['theme', 'slots', 'locale', 'settingsScope']
  * @param ctx - Client root context.
  */
 export function apply(ctx: ClientContext): void {
-  const controller = new LiquidGlassController(ctx.theme)
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-liquid-glass: dictionaries')
+  const t = ctx.locale.bind(NS)
+  const controller = new LiquidGlassController(ctx.theme, t)
   controller.attachSettings(ctx.settingsScope.bind({ namespace: SETTINGS_NAMESPACE }))
   ctx.effect(() => controller.start(), 'ui-liquid-glass: overlay controller')
   ctx.on('theme/change', () => { controller.onPaletteChange() })
+  ctx.on('locale/change', () => { controller.onLocaleChange() })
   void controller.initCustomWallpaper()
-
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-liquid-glass: dictionaries')
   const injected = (): LiquidGlassSettingsCardInjected => ({
     hooks: { snapshot: controller.snapshot },
     setEnabled: (enabled) => { controller.setEnabled(enabled) },
     setPreset: (preset) => { controller.setPreset(preset) },
-    setVeil: (percent) => { controller.setVeil(percent) },
-    setClarity: (percent) => { controller.setClarity(percent) },
     setLook: (id) => { controller.setLook(id) },
     uploadCustom: image => controller.uploadCustomWallpaper(image),
     removeCustom: id => controller.removeCustomWallpaper(id),

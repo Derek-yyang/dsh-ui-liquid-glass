@@ -6,15 +6,23 @@
 import { Context } from '@deepseek-ai/cordis'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { liquidGLMock } = vi.hoisted(() => ({
+const { liquidGLMock, addGalleryImageMock } = vi.hoisted(() => ({
   liquidGLMock: vi.fn<(options: unknown) => { el: null }>(() => ({ el: null })),
+  addGalleryImageMock: vi.fn(async (blob: Blob) => ({ id: 'shot', blob, createdAt: 1 })),
 }))
 
 vi.mock('liquid-gl', () => ({
   default: Object.assign(liquidGLMock, { registerDynamic: vi.fn() }),
 }))
 
+vi.mock('../src/client/wallpaper-store.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/client/wallpaper-store.ts')>()
+  return { ...actual, addGalleryImage: addGalleryImageMock }
+})
+
 import { LiquidGlassController } from '../src/client/controller.ts'
+import { en } from '../src/client/locales.ts'
+import { customPresetId } from '../src/client/wallpaper-store.ts'
 import type { LiquidGlassSnapshot } from '../src/client/controller.ts'
 import type { ThemeTokenOverrides } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
@@ -22,7 +30,7 @@ import type { ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
 import css from '../src/client/glass.module.css'
 import {
   COMPOSER_SELECTOR, GLASS_MARKER, LIQUID_GLASS_TOKENS, MODAL_PANEL_SELECTOR,
-  PACKAGE_ID, PORTAL_MENU_SELECTOR, SEAT_SELECTOR, SETTINGS_DIALOG_SELECTOR, SIDEBAR_SELECTOR, TUNING_PANEL_SELECTOR, VEIL_VAR, WALLPAPER_SELECTOR,
+  PACKAGE_ID, PORTAL_MENU_SELECTOR, SEAT_SELECTOR, SETTINGS_DIALOG_SELECTOR, SIDEBAR_SELECTOR, TUNING_PANEL_SELECTOR, WALLPAPER_SELECTOR,
 } from '../src/tokens.ts'
 import { DEFAULT_LOOK, GLASS_LOOK_PRESETS } from '../src/look.ts'
 import type { LiquidGlassHostSection } from '../src/look.ts'
@@ -32,12 +40,12 @@ const RICH = GLASS_LOOK_PRESETS[DEFAULT_LOOK]
 function hostSection(
   partial: Partial<LiquidGlassHostSection> & Pick<LiquidGlassHostSection, 'enabled' | 'preset'>,
 ): LiquidGlassHostSection {
-  return { veil: 100, clarity: 0, ...RICH, ...partial }
+  return { clarity: 0, ...RICH, ...partial }
 }
 
 function published(partial: Partial<LiquidGlassSnapshot> & Pick<LiquidGlassSnapshot, 'enabled' | 'preset'>): LiquidGlassSnapshot {
   return {
-    gallery: [], veil: 100, clarity: 0, look: DEFAULT_LOOK, lookValues: { ...RICH }, ...partial,
+    gallery: [], clarity: 0, look: DEFAULT_LOOK, lookValues: { ...RICH }, ...partial,
   }
 }
 
@@ -52,6 +60,15 @@ function bench() {
 
 /** A settings scope stub standing `ready` with the given section; records
  * field writes and republishes on `set`. */
+function delayedScopeStub(section: LiquidGlassHostSection, delayMs: number) {
+  const base = scopeStub(section)
+  const innerSet = base.scope.set.bind(base.scope)
+  base.scope.set = (field: string, next: unknown): Promise<void> => innerSet(field, next).then(
+    () => new Promise((resolve) => { setTimeout(resolve, delayMs) }),
+  )
+  return base
+}
+
 function scopeStub(section: LiquidGlassHostSection) {
   let value = { ...section }
   const listeners = new Set<() => void>()
@@ -149,8 +166,10 @@ describe('LiquidGlassController', () => {
       expect(document.querySelector('style')?.textContent).toContain(SEAT_SELECTOR)
       expect(document.querySelector('style')?.textContent).toContain(`${SIDEBAR_SELECTOR}{backdrop-filter:blur(20px)`)
       expect(document.querySelector('style')?.textContent).toContain(`${MODAL_PANEL_SELECTOR}{backdrop-filter:blur(20px)`)
-      expect(document.querySelector('style')?.textContent).toContain(`${SETTINGS_DIALOG_SELECTOR}{background:#fff}`)
-      expect(document.querySelector('style')?.textContent).toContain(`${PORTAL_MENU_SELECTOR}{background:#fff}`)
+      const overlay = document.querySelector('style')?.textContent
+      expect(overlay).toContain(`${SETTINGS_DIALOG_SELECTOR}{background:#fff;--dsw-specific-sidebar-nav-item-hover:rgba(15,17,21,0.06)`)
+      expect(overlay).toContain(`${SETTINGS_DIALOG_SELECTOR}{backdrop-filter:none`)
+      expect(overlay).toContain(`${PORTAL_MENU_SELECTOR}{background:#fff}`)
       const dock = document.querySelector('[data-dsh-liquid-glass-dock]')
       expect(dock).not.toBeNull()
       expect(dock?.getAttribute('aria-pressed')).toBe('true')
@@ -571,57 +590,6 @@ describe('LiquidGlassController', () => {
     }
   })
 
-  it('setVeil scales the veil variable immediately and commits one debounced scope write per gesture', async () => {
-    vi.useFakeTimers()
-    try {
-      const { controller } = bench()
-      const settings = scopeStub(hostSection({ enabled: true, preset: 'custom' }))
-      controller.attachSettings(settings.scope)
-      const dispose = controller.start()
-      try {
-        const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
-        expect(wallpaper.style.getPropertyValue(VEIL_VAR)).toBe('1')
-
-        controller.setVeil(45)
-        expect(wallpaper.style.getPropertyValue(VEIL_VAR)).toBe('0.45')
-        expect(controller.snapshot.getSnapshot().veil).toBe(45)
-        // The write trails the gesture: nothing on the wire while dragging.
-        expect(settings.writes).toEqual([])
-        await vi.advanceTimersByTime(250)
-        expect(settings.writes).toEqual([['veil', 45]])
-
-        // Rapid ticks collapse into one trailing write with the last value.
-        controller.setVeil(30)
-        controller.setVeil(20)
-        await vi.advanceTimersByTime(250)
-        expect(settings.writes).toEqual([['veil', 45], ['veil', 20]])
-        expect(wallpaper.style.getPropertyValue(VEIL_VAR)).toBe('0.2')
-
-        // No-op when the state already holds the value: no further write.
-        controller.setVeil(20)
-        await vi.advanceTimersByTime(250)
-        expect(settings.writes).toEqual([['veil', 45], ['veil', 20]])
-      } finally {
-        dispose()
-      }
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('an adopted section carries its veil onto the wallpaper', () => {
-    const { controller } = bench()
-    controller.attachSettings(scopeStub(hostSection({ enabled: true, preset: 'coast', veil: 45 })).scope)
-    const dispose = controller.start()
-    try {
-      const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
-      expect(wallpaper.style.getPropertyValue(VEIL_VAR)).toBe('0.45')
-      expect(controller.snapshot.getSnapshot().veil).toBe(45)
-    } finally {
-      dispose()
-    }
-  })
-
   it('setClarity re-registers the token layer scaled, and commits one debounced scope write per gesture', async () => {
     vi.useFakeTimers()
     try {
@@ -861,7 +829,7 @@ describe('LiquidGlassController', () => {
         const dock = document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement
         dock.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
         const panel = document.querySelector(TUNING_PANEL_SELECTOR) as HTMLElement
-        const slider = panel.querySelector('input[aria-label="折射"]') as HTMLInputElement
+        const slider = panel.querySelector('input[data-knob="refraction"]') as HTMLInputElement
         const seen: string[] = []
         const record = (): void => { seen.push(slider.value) }
         record()
@@ -883,6 +851,46 @@ describe('LiquidGlassController', () => {
     }
   })
 
+  it('a second look click while the first persist is in flight does not adopt a half-written bag', async () => {
+    vi.useFakeTimers()
+    try {
+      const { controller } = bench()
+      const settings = delayedScopeStub(hostSection({ enabled: true, preset: 'ridge' }), 40)
+      controller.attachSettings(settings.scope)
+      const dispose = controller.start()
+      try {
+        const dock = document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement
+        dock.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+        const slider = document.querySelector('input[data-knob="refraction"]') as HTMLInputElement
+        const seen: string[] = []
+        const record = (): void => { seen.push(slider.value) }
+        controller.setLook('restrained')
+        await vi.advanceTimersByTime(250)
+        record()
+        controller.setLook('standard')
+        record()
+        await vi.advanceTimersByTime(40)
+        record()
+        await Promise.resolve()
+        record()
+        await vi.advanceTimersByTime(250)
+        await vi.advanceTimersByTime(40)
+        await Promise.resolve()
+        record()
+        expect(seen.every(value => (
+          value === String(GLASS_LOOK_PRESETS.restrained.refraction)
+          || value === String(GLASS_LOOK_PRESETS.standard.refraction)
+        ))).toBe(true)
+        expect(slider.value).toBe(String(GLASS_LOOK_PRESETS.standard.refraction))
+        expect(controller.snapshot.getSnapshot().look).toBe('standard')
+      } finally {
+        dispose()
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('rapid named-look clicks do not flash an older bag through the sliders', async () => {
     vi.useFakeTimers()
     try {
@@ -894,7 +902,7 @@ describe('LiquidGlassController', () => {
         const dock = document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement
         dock.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
         const panel = document.querySelector(TUNING_PANEL_SELECTOR) as HTMLElement
-        const slider = panel.querySelector('input[aria-label="折射"]') as HTMLInputElement
+        const slider = panel.querySelector('input[data-knob="refraction"]') as HTMLInputElement
         const allowed = new Set([
           String(RICH.refraction),
           String(GLASS_LOOK_PRESETS.restrained.refraction),
@@ -921,6 +929,79 @@ describe('LiquidGlassController', () => {
     }
   })
 
+  it('parks the lens while a settings dialog is open and resumes when it closes', async () => {
+    const { lens } = installRenderer()
+    const renderer = (window as unknown as { __liquidGLRenderer__: { canvas: HTMLCanvasElement; _rafId: number | null } }).__liquidGLRenderer__
+    const { controller } = bench()
+    const dispose = controller.start()
+    try {
+      const dialog = document.createElement('div')
+      dialog.setAttribute('role', 'dialog')
+      dialog.setAttribute('aria-modal', 'true')
+      document.body.append(dialog)
+      await vi.waitFor(() => {
+        expect(renderer.canvas.style.display).toBe('none')
+      })
+      expect(lens.setShadow).toHaveBeenCalledWith(false)
+      dialog.remove()
+      await vi.waitFor(() => {
+        expect(renderer.canvas.style.display).toBe('')
+      })
+      expect(lens.setShadow).toHaveBeenCalledWith(true)
+    } finally {
+      dispose()
+    }
+  })
+
+  it('a long-press on the dock cycles built-ins then custom gallery ids', async () => {
+    vi.useFakeTimers()
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:shot')
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    try {
+      const { controller } = bench()
+      const dispose = controller.start()
+      try {
+        await controller.uploadCustomWallpaper(new Blob(['x'], { type: 'image/png' }))
+        expect(controller.snapshot.getSnapshot().preset).toBe(customPresetId('shot'))
+        const dock = document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement
+        dock.dispatchEvent(new Event('pointerdown'))
+        await vi.advanceTimersByTime(450)
+        expect(controller.snapshot.getSnapshot().preset).toBe('ridge')
+        dock.dispatchEvent(new Event('pointerdown'))
+        await vi.advanceTimersByTime(450)
+        expect(controller.snapshot.getSnapshot().preset).toBe('coast')
+        controller.setPreset('arch')
+        dock.dispatchEvent(new Event('pointerdown'))
+        await vi.advanceTimersByTime(450)
+        expect(controller.snapshot.getSnapshot().preset).toBe(customPresetId('shot'))
+      } finally {
+        dispose()
+      }
+    } finally {
+      createObjectURL.mockRestore()
+      revokeObjectURL.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('onLocaleChange rewrites dock and popover copy from the bound translator', () => {
+    const { overrideTokens } = bench()
+    const controller = new LiquidGlassController(
+      { overrideTokens } as unknown as ThemeRuntime,
+      (key) => en[key],
+    )
+    const dispose = controller.start()
+    try {
+      const dock = document.querySelector('[data-dsh-liquid-glass-dock]') as HTMLButtonElement
+      expect(dock.getAttribute('aria-label')).toBe('Toggle liquid glass')
+      dock.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+      expect(document.querySelector(TUNING_PANEL_SELECTOR)?.textContent).toContain('Fine-tune glass')
+      expect(document.querySelector('input[data-knob="refraction"]')).not.toBeNull()
+    } finally {
+      dispose()
+    }
+  })
+
   it('right-clicking the dock opens a tuning panel whose sliders hot-update the look', () => {
     const { lens } = installRenderer()
     const { controller } = bench()
@@ -931,20 +1012,26 @@ describe('LiquidGlassController', () => {
       dock.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
       const panel = document.querySelector(TUNING_PANEL_SELECTOR) as HTMLElement
       expect(panel).not.toBeNull()
-      const slider = panel.querySelector('input[aria-label="折射"]') as HTMLInputElement
+      const slider = panel.querySelector('input[data-knob="refraction"]') as HTMLInputElement
       expect(slider.value).toBe(String(RICH.refraction))
       slider.value = '0.09'
       slider.dispatchEvent(new Event('input'))
       expect(controller.snapshot.getSnapshot().look).toBe('custom')
       expect(lens.options.refraction).toBe(0.09)
       // A drag must not rebuild the input (that would abort the gesture).
-      expect(panel.querySelector('input[aria-label="折射"]')).toBe(slider)
+      expect(panel.querySelector('input[data-knob="refraction"]')).toBe(slider)
       const restrained = panel.querySelector('button[data-look="restrained"]') as HTMLButtonElement
       expect(restrained).not.toBeNull()
       restrained.click()
       expect(controller.snapshot.getSnapshot().look).toBe('restrained')
       expect(lens.options.refraction).toBe(GLASS_LOOK_PRESETS.restrained.refraction)
       expect(restrained.getAttribute('aria-pressed')).toBe('true')
+      const clarity = panel.querySelector('input[data-knob="clarity"]') as HTMLInputElement
+      expect(clarity.value).toBe('0')
+      clarity.value = '80'
+      clarity.dispatchEvent(new Event('input'))
+      expect(controller.snapshot.getSnapshot().clarity).toBe(80)
+      expect(panel.querySelector('input[data-knob="clarity"]')).toBe(clarity)
       slider.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
       expect(document.querySelector(TUNING_PANEL_SELECTOR)).not.toBeNull()
       dock.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
