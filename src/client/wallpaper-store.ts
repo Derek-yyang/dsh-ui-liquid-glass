@@ -4,6 +4,8 @@
  * the preset id). Every read degrades to empty on failure — private mode or
  * blocked storage loses the images, never breaks the page. */
 
+import { WALLPAPER_PRESETS, type WallpaperPreset } from '../tokens.ts'
+
 const DB_NAME = 'dsh-ui-liquid-glass'
 const DB_VERSION = 2
 const LEGACY_STORE = 'wallpaper'
@@ -115,4 +117,26 @@ export function galleryIdFromPreset(preset: string): string | undefined {
   if (preset === 'custom') return 'legacy'
   if (preset.startsWith('c_')) return preset.slice(2)
   return undefined
+}
+
+/**
+ * Long-press cycle: built-ins in `WALLPAPER_PRESETS` order, then every
+ * device-local custom id oldest-first. An unknown or retired Host id
+ * (`collage`, a deleted `c_*`) is treated as `ridge` so the next press
+ * always lands on a live tile.
+ * @param current - the active Host preset id.
+ * @param galleryIds - custom image ids currently on this device, oldest first.
+ * @returns the next preset in the cycle.
+ */
+export function nextWallpaperPreset(
+  current: string,
+  galleryIds: readonly string[],
+): WallpaperPreset {
+  const ring: WallpaperPreset[] = [
+    ...WALLPAPER_PRESETS,
+    ...galleryIds.map(id => customPresetId(id)),
+  ]
+  const index = ring.indexOf(current as WallpaperPreset)
+  const from = index === -1 ? 0 : index
+  return ring[(from + 1) % ring.length] ?? WALLPAPER_PRESETS[0]
 }
