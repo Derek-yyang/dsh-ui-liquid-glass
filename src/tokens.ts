@@ -17,16 +17,16 @@ export const PACKAGE_ID = 'dsh-ui-liquid-glass'
 export const SETTINGS_NAMESPACE = 'liquid-glass'
 
 /** Wallpaper presets in long-press cycling order; the first is the default.
- * `ridge` is a high-contrast line-art scene (structure for the refraction to
- * bend, concentrated behind the composer); `collage` is the original gradient
- * collage. */
-export const WALLPAPER_PRESETS = ['ridge', 'collage'] as const
+ * All built-ins are line-art scenes with hard edges for the refraction to
+ * bend. A Host document still holding the retired `collage` id falls back
+ * to `ridge`. */
+export const WALLPAPER_PRESETS = ['ridge', 'coast', 'garden', 'arch'] as const
 
 /** All wallpaper preset ids. `custom` is a user-uploaded image persisted in
  * IndexedDB (device-local — the Host namespace only stores the id); it never
  * enters the dock's cycle, because cycling onto it without an uploaded image
- * would just fall back. */
-export type WallpaperPreset = (typeof WALLPAPER_PRESETS)[number] | 'custom'
+ * would just fall back. `collage` is a retired Host id that paints as `ridge`. */
+export type WallpaperPreset = (typeof WALLPAPER_PRESETS)[number] | 'custom' | 'collage'
 
 /** DOM marker of the plugin-owned wallpaper layer (the refraction source). */
 export const WALLPAPER_SELECTOR = '[data-dsh-liquid-glass-wallpaper]'

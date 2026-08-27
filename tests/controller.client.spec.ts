@@ -409,11 +409,11 @@ describe('LiquidGlassController', () => {
     }
 
     const second = bench()
-    second.controller.attachSettings(scopeStub(hostSection({ enabled: true, preset: 'collage' })).scope)
+    second.controller.attachSettings(scopeStub(hostSection({ enabled: true, preset: 'coast' })).scope)
     const disposeSecond = second.controller.start()
     try {
       const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
-      expect(wallpaper.className).toContain(css.collage)
+      expect(wallpaper.className).toContain(css.coast)
     } finally {
       disposeSecond()
     }
@@ -438,7 +438,7 @@ describe('LiquidGlassController', () => {
         // recaptures only after the 150ms crossfade settles. No theme toggle.
         dock.dispatchEvent(new Event('pointerdown'))
         await vi.advanceTimersByTime(450)
-        expect(wallpaper.className).toContain(css.collage)
+        expect(wallpaper.className).toContain(css.coast)
         expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(1)
         expect(captures.count).toBe(capturesBeforeCycle)
         // Two rAF ticks start the fade class; the 150ms timer then settles.
@@ -458,9 +458,9 @@ describe('LiquidGlassController', () => {
         dock.dispatchEvent(new Event('pointerup'))
         dock.click()
         expect(dock.getAttribute('aria-pressed')).toBe('false')
-        expect(wallpaper.className).toContain(css.collage)
+        expect(wallpaper.className).toContain(css.coast)
         // The long-press cycle and the trailing toggle both published.
-        expect(controller.snapshot.getSnapshot()).toEqual(published({ enabled: false, preset: 'collage' }))
+        expect(controller.snapshot.getSnapshot()).toEqual(published({ enabled: false, preset: 'coast' }))
       } finally {
         dispose()
       }
@@ -498,11 +498,11 @@ describe('LiquidGlassController', () => {
         expect(settings.writes).toEqual([['enabled', false], ['enabled', true]])
         expect(controller.snapshot.getSnapshot()).toEqual(published({ enabled: true, preset: 'ridge' }))
 
-        controller.setPreset('collage')
-        expect(settings.writes).toEqual([['enabled', false], ['enabled', true], ['preset', 'collage']])
-        expect(controller.snapshot.getSnapshot().preset).toBe('collage')
-        expect((document.querySelector(WALLPAPER_SELECTOR) as HTMLElement).className).toContain(css.collage)
-        // Live layer already paints collage; the snapshot recaptures after the
+        controller.setPreset('coast')
+        expect(settings.writes).toEqual([['enabled', false], ['enabled', true], ['preset', 'coast']])
+        expect(controller.snapshot.getSnapshot().preset).toBe('coast')
+        expect((document.querySelector(WALLPAPER_SELECTOR) as HTMLElement).className).toContain(css.coast)
+        // Live layer already paints coast; the snapshot recaptures after the
         // 150ms outgoing fade, not on the same turn as the class swap.
         const capturesAtSwap = captures.count
         expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(1)
@@ -527,7 +527,7 @@ describe('LiquidGlassController', () => {
       const dispose = controller.start()
       try {
         const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
-        controller.setPreset('collage')
+        controller.setPreset('coast')
         expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(1)
         const firstOutgoing = document.querySelector(`.${css.outgoing}`)
         const capturesMidFade = captures.count
@@ -556,7 +556,7 @@ describe('LiquidGlassController', () => {
       const { controller } = bench()
       const dispose = controller.start()
       try {
-        controller.setPreset('collage')
+        controller.setPreset('coast')
         expect(document.querySelectorAll(`.${css.outgoing}`).length).toBe(1)
         const capturesMidFade = captures.count
         controller.setEnabled(false)
@@ -611,7 +611,7 @@ describe('LiquidGlassController', () => {
 
   it('an adopted section carries its veil onto the wallpaper', () => {
     const { controller } = bench()
-    controller.attachSettings(scopeStub(hostSection({ enabled: true, preset: 'collage', veil: 45 })).scope)
+    controller.attachSettings(scopeStub(hostSection({ enabled: true, preset: 'coast', veil: 45 })).scope)
     const dispose = controller.start()
     try {
       const wallpaper = document.querySelector(WALLPAPER_SELECTOR) as HTMLElement
@@ -666,7 +666,7 @@ describe('LiquidGlassController', () => {
 
   it('an adopted clarity re-registers the layer scaled', () => {
     const { controller, overrideTokens } = bench()
-    controller.attachSettings(scopeStub(hostSection({ enabled: true, preset: 'collage', clarity: 100 })).scope)
+    controller.attachSettings(scopeStub(hostSection({ enabled: true, preset: 'coast', clarity: 100 })).scope)
     const dispose = controller.start()
     try {
       expect(overrideTokens).toHaveBeenCalledTimes(1)

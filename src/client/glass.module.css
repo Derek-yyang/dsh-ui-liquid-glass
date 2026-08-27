@@ -141,31 +141,97 @@
     var(--dsh-liquid-glass-custom-image);
 }
 
-/* Preset "collage": the original gradient collage — saturated adjacent blobs
- * plus one deep void. Kept as the soft alternative; the strongest color sits
- * behind the composer. */
-.collage {
-  background-color: #f3eefa;
+/* Preset "coast": one horizon plus a lighthouse. The refraction bends the
+ * waterline; the upper field stays sparse for the sidebar. */
+.coast {
+  background-color: #eef3f6;
   background-image:
-    radial-gradient(30rem 24rem at 12% 92vh, rgba(49, 33, 90, 0.80), transparent 70%),
-    radial-gradient(34rem 26rem at 82% 88vh, rgba(236, 72, 153, 0.72), transparent 68%),
-    radial-gradient(28rem 30rem at 28% 45vh, rgba(139, 92, 246, 0.52), transparent 68%),
-    radial-gradient(30rem 22rem at 88% 15vh, rgba(34, 211, 238, 0.55), transparent 66%),
-    radial-gradient(20rem 16rem at 68% 55vh, rgba(251, 146, 60, 0.42), transparent 65%),
-    radial-gradient(26rem 20rem at 10% 12vh, rgba(244, 114, 182, 0.50), transparent 65%),
-    linear-gradient(160deg, #f6f0fc 0%, #efe6fa 50%, #e9defa 100%);
+    linear-gradient(
+      180deg,
+      rgba(238, 243, 246, 0.75) 0%,
+      rgba(238, 243, 246, 0) 30%,
+      rgba(238, 243, 246, 0) 78%,
+      rgba(238, 243, 246, 0.85) 100%
+    ),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'%3E%3Crect width='1600' height='900' fill='%23eef3f6'/%3E%3Ccircle cx='1280' cy='210' r='70' fill='none' stroke='%232b3a44' stroke-width='2' opacity='.35'/%3E%3Cpath d='M1180 720 L1180 430 L1210 400 L1240 430 L1240 720' fill='none' stroke='%232b3a44' stroke-width='2.2'/%3E%3Ccircle cx='1210' cy='392' r='7' fill='%232b3a44'/%3E%3Cpath d='M0 640 Q200 620 400 635 T800 628 T1200 642 T1600 630 L1600 900 L0 900 Z' fill='%2324333c' opacity='.9'/%3E%3Cpath d='M0 640 Q180 652 360 644 T720 650 T1100 638 T1600 648' fill='none' stroke='%232b3a44' stroke-width='1.2' opacity='.35'/%3E%3Cpath d='M0 670 Q220 662 440 672 T880 666 T1600 678' fill='none' stroke='%23fff' stroke-width='1' opacity='.25'/%3E%3C/svg%3E");
+  background-size: 100% 100vh;
+  background-position: 0 60vh;
+  background-repeat: no-repeat;
 }
 
-:global(body[data-ds-dark-theme]) .collage {
-  background-color: #0a0714;
+:global(body[data-ds-dark-theme]) .coast {
+  background-color: #080c12;
   background-image:
-    radial-gradient(32rem 24rem at 75% 90vh, rgba(236, 72, 153, 0.55), transparent 68%),
-    radial-gradient(28rem 26rem at 12% 70vh, rgba(190, 24, 93, 0.45), transparent 68%),
-    radial-gradient(30rem 26rem at 25% 15vh, rgba(139, 92, 246, 0.40), transparent 68%),
-    radial-gradient(36rem 30rem at 85% 45vh, rgba(15, 10, 40, 0.90), transparent 72%),
-    radial-gradient(18rem 14rem at 55% 30vh, rgba(34, 211, 238, 0.30), transparent 66%),
-    radial-gradient(16rem 12rem at 45% 80vh, rgba(251, 113, 133, 0.35), transparent 65%),
-    linear-gradient(160deg, #120b1e 0%, #0d0817 55%, #090612 100%);
+    linear-gradient(
+      180deg,
+      rgba(8, 12, 18, 0.75) 0%,
+      rgba(8, 12, 18, 0) 30%,
+      rgba(8, 12, 18, 0) 78%,
+      rgba(8, 12, 18, 0.85) 100%
+    ),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'%3E%3Crect width='1600' height='900' fill='%23080c12'/%3E%3Ccircle cx='1280' cy='210' r='70' fill='none' stroke='%237aa0b8' stroke-width='1.6' opacity='.45'/%3E%3Cpath d='M1180 720 L1180 430 L1210 400 L1240 430 L1240 720' fill='none' stroke='%239dc0d4' stroke-width='2'/%3E%3Ccircle cx='1210' cy='392' r='7' fill='%23d5e8f2'/%3E%3Cpath d='M0 640 Q200 620 400 635 T800 628 T1200 642 T1600 630 L1600 900 L0 900 Z' fill='%230e1822'/%3E%3Cpath d='M0 640 Q180 652 360 644 T720 650 T1100 638 T1600 648' fill='none' stroke='%237aa0b8' stroke-width='1.2' opacity='.4'/%3E%3Cpath d='M0 670 Q220 662 440 672 T880 666 T1600 678' fill='none' stroke='%23cfe4f0' stroke-width='1' opacity='.2'/%3E%3C/svg%3E");
+}
+
+/* Preset "garden": a low wall and one simplified tree. Few edges, enough
+ * contrast, no stacked ridgelines for the sidebar frost to stripe. */
+.garden {
+  background-color: #f3efe6;
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(243, 239, 230, 0.75) 0%,
+      rgba(243, 239, 230, 0) 30%,
+      rgba(243, 239, 230, 0) 78%,
+      rgba(243, 239, 230, 0.85) 100%
+    ),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'%3E%3Crect width='1600' height='900' fill='%23f3efe6'/%3E%3Ccircle cx='1260' cy='250' r='210' fill='none' stroke='%23332e26' stroke-width='1.4' opacity='.2'/%3E%3Ccircle cx='420' cy='430' r='95' fill='none' stroke='%23332e26' stroke-width='2'/%3E%3Ccircle cx='470' cy='390' r='70' fill='none' stroke='%23332e26' stroke-width='1.6' opacity='.7'/%3E%3Ccircle cx='360' cy='400' r='55' fill='none' stroke='%23332e26' stroke-width='1.4' opacity='.55'/%3E%3Cpath d='M418 720 L418 500' stroke='%23332e26' stroke-width='3'/%3E%3Cpath d='M0 720 L1600 720 L1600 900 L0 900 Z' fill='%232c281f'/%3E%3C/svg%3E");
+  background-size: 100% 100vh;
+  background-position: 0 60vh;
+  background-repeat: no-repeat;
+}
+
+:global(body[data-ds-dark-theme]) .garden {
+  background-color: #0c0d10;
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(12, 13, 16, 0.75) 0%,
+      rgba(12, 13, 16, 0) 30%,
+      rgba(12, 13, 16, 0) 78%,
+      rgba(12, 13, 16, 0.85) 100%
+    ),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'%3E%3Crect width='1600' height='900' fill='%230c0d10'/%3E%3Ccircle cx='1260' cy='250' r='210' fill='none' stroke='%23cbb89a' stroke-width='1.2' opacity='.22'/%3E%3Ccircle cx='420' cy='430' r='95' fill='none' stroke='%23d2c3a8' stroke-width='1.8'/%3E%3Ccircle cx='470' cy='390' r='70' fill='none' stroke='%23d2c3a8' stroke-width='1.4' opacity='.7'/%3E%3Ccircle cx='360' cy='400' r='55' fill='none' stroke='%23d2c3a8' stroke-width='1.2' opacity='.5'/%3E%3Cpath d='M418 720 L418 500' stroke='%23d2c3a8' stroke-width='2.5'/%3E%3Cpath d='M0 720 L1600 720 L1600 900 L0 900 Z' fill='%23161412'/%3E%3C/svg%3E");
+}
+
+/* Preset "arch": one large arch in the lower-right so the lens has a curve
+ * to bend; the sky is a single thin arc. */
+.arch {
+  background-color: #f6f1ea;
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(246, 241, 234, 0.75) 0%,
+      rgba(246, 241, 234, 0) 30%,
+      rgba(246, 241, 234, 0) 78%,
+      rgba(246, 241, 234, 0.85) 100%
+    ),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'%3E%3Crect width='1600' height='900' fill='%23f6f1ea'/%3E%3Cpath d='M200 220 A900 900 0 0 1 1400 220' fill='none' stroke='%23342722' stroke-width='1.2' opacity='.18'/%3E%3Cpath d='M980 900 L980 420 A220 220 0 0 1 1420 420 L1420 900' fill='%232c211c'/%3E%3Cpath d='M1040 900 L1040 430 A160 160 0 0 1 1360 430 L1360 900' fill='%23f6f1ea'/%3E%3Ccircle cx='1200' cy='390' r='6' fill='%23342722'/%3E%3C/svg%3E");
+  background-size: 100% 100vh;
+  background-position: 0 60vh;
+  background-repeat: no-repeat;
+}
+
+:global(body[data-ds-dark-theme]) .arch {
+  background-color: #0b0c10;
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(11, 12, 16, 0.75) 0%,
+      rgba(11, 12, 16, 0) 30%,
+      rgba(11, 12, 16, 0) 78%,
+      rgba(11, 12, 16, 0.85) 100%
+    ),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'%3E%3Crect width='1600' height='900' fill='%230b0c10'/%3E%3Cpath d='M200 220 A900 900 0 0 1 1400 220' fill='none' stroke='%23e2c9b0' stroke-width='1.2' opacity='.2'/%3E%3Cpath d='M980 900 L980 420 A220 220 0 0 1 1420 420 L1420 900' fill='%231a1614'/%3E%3Cpath d='M1040 900 L1040 430 A160 160 0 0 1 1360 430 L1360 900' fill='%230b0c10'/%3E%3Ccircle cx='1200' cy='390' r='6' fill='%23e8d3bc'/%3E%3C/svg%3E");
 }
 
 .dock {

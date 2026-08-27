@@ -92,8 +92,8 @@ describe('LiquidGlassSettingsCard', () => {
     const { setPreset } = mount(cardState({ enabled: true, preset: 'ridge' }))
     openBody()
     fireEvent.click(screen.getByRole('button', { name: 'Ridge line art' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Gradient collage' }))
-    expect(setPreset).toHaveBeenCalledWith('collage')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Coast line art' }))
+    expect(setPreset).toHaveBeenCalledWith('coast')
   })
 
   it('the upload button routes the chosen file to uploadCustom', () => {

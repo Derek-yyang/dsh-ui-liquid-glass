@@ -8,7 +8,9 @@ declare module '*/glass.module.css' {
     readonly outgoing: string
     readonly outgoingFade: string
     readonly ridge: string
-    readonly collage: string
+    readonly coast: string
+    readonly garden: string
+    readonly arch: string
     readonly custom: string
     readonly dock: string
     readonly dockOff: string

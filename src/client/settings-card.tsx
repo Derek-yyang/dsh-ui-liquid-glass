@@ -44,7 +44,9 @@ export type LiquidGlassSettingsCardProps =
  * has been uploaded on this device. */
 const PRESETS: readonly { id: WallpaperPreset; label: LiquidGlassLocaleKey }[] = [
   { id: 'ridge', label: 'presetRidge' },
-  { id: 'collage', label: 'presetCollage' },
+  { id: 'coast', label: 'presetCoast' },
+  { id: 'garden', label: 'presetGarden' },
+  { id: 'arch', label: 'presetArch' },
 ]
 
 const LOOK_LABEL: Record<GlassLookId, LiquidGlassLocaleKey> = {

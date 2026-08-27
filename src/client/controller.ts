@@ -84,10 +84,17 @@ const LONG_PRESS_MS = 450
 const SLIDER_WRITE_DEBOUNCE_MS = 250
 
 /** Preset id → CSS module class carrying the preset's paint. */
-const WALLPAPER_CLASSES: Record<WallpaperPreset, string> = {
+const WALLPAPER_CLASSES: Record<Exclude<WallpaperPreset, 'collage'>, string> = {
   ridge: css.ridge,
-  collage: css.collage,
+  coast: css.coast,
+  garden: css.garden,
+  arch: css.arch,
   custom: css.custom,
+}
+
+/** Retired `collage` Host ids paint as `ridge`. */
+function resolveWallpaperPreset(preset: WallpaperPreset): Exclude<WallpaperPreset, 'collage'> {
+  return preset === 'collage' ? 'ridge' : preset
 }
 
 /** One glassified lens the window-global renderer tracks (undocumented
@@ -624,7 +631,9 @@ export class LiquidGlassController {
   #applyWallpaperPreset(wallpaper: HTMLElement): void {
     // A custom preset without a loaded image (first boot before IndexedDB
     // answers, or another device) falls back to the default scene.
-    const preset = this.#preset === 'custom' && this.#customUrl === undefined ? 'ridge' : this.#preset
+    const preset = this.#preset === 'custom' && this.#customUrl === undefined
+      ? 'ridge'
+      : resolveWallpaperPreset(this.#preset)
     wallpaper.className = `${css.wallpaper} ${WALLPAPER_CLASSES[preset]}`
     this.#applyVeil(wallpaper)
     if (preset === 'custom') {

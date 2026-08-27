@@ -113,10 +113,10 @@ describe('ui-liquid-glass browser plugin settings registration', () => {
     expect(wallpaper).not.toBeNull()
     expect(wallpaper.style.display).toBe('none')
 
-    injected.setPreset('collage')
-    expect(b.settings.writes).toEqual([['enabled', false], ['preset', 'collage']])
-    expect(injected.hooks.snapshot.getSnapshot().preset).toBe('collage')
-    expect(wallpaper.className).toContain('collage')
+    injected.setPreset('coast')
+    expect(b.settings.writes).toEqual([['enabled', false], ['preset', 'coast']])
+    expect(injected.hooks.snapshot.getSnapshot().preset).toBe('coast')
+    expect(wallpaper.className).toContain('coast')
 
     await b.ctx.fiber.dispose()
   })

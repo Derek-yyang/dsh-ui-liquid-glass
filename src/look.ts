@@ -20,7 +20,7 @@ export interface LiquidGlassHostSection extends GlassLookValues {
   /** Whether the glass theme is applied. */
   enabled: boolean
   /** Active wallpaper preset id. */
-  preset: 'ridge' | 'collage' | 'custom'
+  preset: 'ridge' | 'coast' | 'garden' | 'arch' | 'custom' | 'collage'
   /** Custom-image veil strength in percent (0–100). */
   veil: number
   /** Surface clarity in percent (0–100). */
