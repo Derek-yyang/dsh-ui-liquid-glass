@@ -4,6 +4,15 @@ English | [中文](README.zh.md)
 
 A third-party UI theme plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) web. Liquid Glass theme: one alias-token override layer that turns the dsh web surface into a translucent glass palette over a plugin-owned wallpaper, [liquidGL](https://liquidgl.naughtyduk.com) (npm `liquid-gl`) WebGL refraction applied to the conversation composer card itself, scroll-synced wallpaper motion, a dock toggle, and a card in the Settings Plugins section exposing the same toggle plus the wallpaper choice — the toggle and preset id persist in the Host settings document, and a custom uploaded image persists device-local in IndexedDB. The wallpaper has four built-in line-art presets — `ridge`, `coast`, `garden`, `arch` — plus the user's uploaded images, painted raw; long-pressing the dock button cycles the whole gallery (built-ins, then customs) or a tile can be picked in the Settings card. Soft gradient scenes were dropped because they do not give the glass edges to bend.
 
+![Overview](docs/screenshot-overview.png)
+
+Right-click the droplet to fine-tune look and clarity. Settings only toggles the theme and picks a wallpaper.
+
+<p>
+<img src="docs/screenshot-tuning.png" alt="Look and clarity popover" width="360" />
+<img src="docs/screenshot-gallery.png" alt="Wallpaper gallery in Settings" width="360" />
+</p>
+
 ## Install
 
 Requires a running dsh web (developed against dsh `0.1.1-rc.2`). Use a dedicated profile so the stock `web` profile stays untouched:

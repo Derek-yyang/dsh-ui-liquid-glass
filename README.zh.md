@@ -2,7 +2,16 @@
 
 [English](README.md) | 中文
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）web 的第三方 UI 主题插件。液态玻璃主题：一层别名 token 覆盖，把 dsh web 界面变成铺在插件壁纸上的半透明玻璃配色；[liquidGL](https://liquidgl.naughtyduk.com)（npm 包 `liquid-gl`）WebGL 折射直接作用在会话输入框卡片上；随会话滚动联动的壁纸；一个角落按钮；以及设置页"插件"节里的一张卡片，承载同一开关、壁纸选择与通透度——开关、预设 id 与通透度持久化到 Host 设置文档，自定义上传的图片持久化到浏览器本地 IndexedDB。壁纸有四个内置线稿预设——`ridge`、`coast`、`garden`、`arch`——外加用户上传的图片；长按角落按钮按图库顺序循环（内置 + 自定义），也可以在设置卡片里点选。渐变软场景已去掉，因为给不了玻璃可弯折的边缘。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）web 的第三方 UI 主题插件。液态玻璃主题：一层别名 token 覆盖，把 dsh web 界面变成铺在插件壁纸上的半透明玻璃配色；[liquidGL](https://liquidgl.naughtyduk.com)（npm 包 `liquid-gl`）WebGL 折射直接作用在会话输入框卡片上；随会话滚动联动的壁纸；一个角落按钮；以及设置页"插件"节里的一张卡片，承载同一开关与壁纸选择——开关与预设 id 持久化到 Host 设置文档，自定义上传的图片持久化到浏览器本地 IndexedDB。壁纸有四个内置线稿预设——`ridge`、`coast`、`garden`、`arch`——外加用户上传的图片；长按角落按钮按图库顺序循环（内置 + 自定义），也可以在设置卡片里点选。渐变软场景已去掉，因为给不了玻璃可弯折的边缘。
+
+![总览](docs/screenshot-overview.png)
+
+右键水滴微调观感与通透度。设置页只负责开关和图库。
+
+<p>
+<img src="docs/screenshot-tuning.png" alt="微调面板" width="360" />
+<img src="docs/screenshot-gallery.png" alt="设置页壁纸图库" width="360" />
+</p>
 
 ## 安装
 
