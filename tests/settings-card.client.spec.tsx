@@ -110,6 +110,11 @@ describe('LiquidGlassSettingsCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /Custom image 1/ }))
     expect(setPreset).toHaveBeenCalledWith('c_one')
     fireEvent.click(screen.getByRole('button', { name: 'Delete this image' }))
+    expect(removeCustom).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: 'Delete this image' })).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this image' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
     expect(removeCustom).toHaveBeenCalledWith('one')
   })
 

@@ -40,6 +40,8 @@ export const zh = {
   customDescription: '上传本地图片作为壁纸。图片仅保存在此浏览器，不上传到服务端。建议竖图 1920×2400 以上。',
   upload: '添加图片',
   deleteCustom: '删除这张图片',
+  deleteCancel: '取消',
+  deleteConfirm: '确认',
   clarityTitle: '通透度',
   clarityDescription: '玻璃表面的着色。拉高更通透，100 时表面不再给壁纸添色（悬停、选中等交互态保留底限）。',
 } satisfies Record<string, string>
@@ -87,6 +89,8 @@ export const en: Record<LiquidGlassLocaleKey, string> = {
   customDescription: 'Upload a local image as the wallpaper. It stays in this browser and never leaves your machine. Portrait images around 1920×2400 or larger work best.',
   upload: 'Add image',
   deleteCustom: 'Delete this image',
+  deleteCancel: 'Cancel',
+  deleteConfirm: 'Confirm',
   clarityTitle: 'Clarity',
   clarityDescription: 'Tint of the glass surfaces. Higher is clearer; at 100 surfaces add no color over the wallpaper (hover, selection, and other interactive states keep a usable floor).',
 }

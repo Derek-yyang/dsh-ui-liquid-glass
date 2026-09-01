@@ -55,6 +55,7 @@ export function LiquidGlassSettingsCard(
 ): ReactNode {
   const snapshot = useSnapshot(value => value)
   const [open, setOpen] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<string | undefined>(undefined)
   const fileInput = useRef<HTMLInputElement | null>(null)
 
   return (
@@ -116,14 +117,36 @@ export function LiquidGlassSettingsCard(
                       >
                         <span className={css.galleryCaption}>{t('presetCustom')} {index + 1}</span>
                       </button>
-                      <button
-                        type="button"
-                        className={css.galleryDelete}
-                        aria-label={t('deleteCustom')}
-                        onClick={() => { void removeCustom(entry.id) }}
-                      >
-                        ×
-                      </button>
+                      {pendingDelete === entry.id
+                        ? (
+                          <div className={css.galleryConfirm}>
+                            <button
+                              type="button"
+                              className={css.galleryConfirmCancel}
+                              onClick={() => { setPendingDelete(undefined) }}
+                            >
+                              {t('deleteCancel')}
+                            </button>
+                            <button
+                              type="button"
+                              className={css.galleryConfirmOk}
+                              onClick={() => {
+                                setPendingDelete(undefined)
+                                void removeCustom(entry.id)
+                              }}
+                            >
+                              {t('deleteConfirm')}
+                            </button>
+                          </div>
+                        )
+                        : (
+                          <button
+                            type="button"
+                            className={css.galleryDelete}
+                            aria-label={t('deleteCustom')}
+                            onClick={() => { setPendingDelete(entry.id) }}
+                          />
+                        )}
                     </div>
                   )
                 })}

@@ -402,13 +402,70 @@
   right: 6px;
   width: 18px;
   height: 18px;
+  padding: 0;
   border: none;
   border-radius: 9px;
   background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: 12px;
-  line-height: 18px;
   cursor: pointer;
+}
+
+.galleryDelete::before,
+.galleryDelete::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 1.5px;
+  background: #fff;
+  border-radius: 1px;
+}
+
+.galleryDelete::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.galleryDelete::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.galleryDelete:hover {
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.galleryDelete:hover::before,
+.galleryDelete:hover::after {
+  width: 9px;
+}
+
+.galleryConfirm {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.galleryConfirmCancel,
+.galleryConfirmOk {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.galleryConfirmCancel {
+  background: rgba(255, 255, 255, 0.88);
+  color: rgb(28, 32, 38);
+}
+
+.galleryConfirmOk {
+  background: rgb(220, 38, 38);
+  color: #fff;
 }
 
 .galleryAdd {

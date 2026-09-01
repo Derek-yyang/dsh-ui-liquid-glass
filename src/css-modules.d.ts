@@ -33,6 +33,9 @@ declare module '*/glass.module.css' {
     readonly galleryCaption: string
     readonly galleryThumb: string
     readonly galleryDelete: string
+    readonly galleryConfirm: string
+    readonly galleryConfirmCancel: string
+    readonly galleryConfirmOk: string
     readonly galleryAdd: string
     readonly galleryAddMark: string
     readonly tuning: string
